@@ -2,7 +2,7 @@
 
 MicroBit uBit;
 
-// MARK: Question 1
+// MARK 1: Question 1
 class ExtendedButton {
     private:
         unsigned long lastPressed;
@@ -64,7 +64,7 @@ void aTimeForEverything() {
 }
 
 
-// MARK: Question 2
+// MARK 2: Question 2
 /* 
  * The margin of error for what we define as vertical.
  *   0   : perfectly horizontal
@@ -74,32 +74,42 @@ void aTimeForEverything() {
 // Defines how many consecutive clean data points are captured before we register a change in verticality
 #define VERT_SENS 20
 
+enum orient { HORIZONTAL=false, VERTICAL=true };
+
 int getSquareMagnitude(int x, int y) {
     return x * x + y * y;
 }
 
 /* 
- * We can check for verticality by checking the magnitude of the vector <x, y>
+ * We can check for orientation by checking the magnitude of the vector <x, y>
  *   0   : perfectly horizontal
  *   1000: perfectly vertical
  */
-bool isVerticalRaw() {
-    return getSquareMagnitude(uBit.accelerometer.getX(), uBit.accelerometer.getY()) > VERT_MARGIN * VERT_MARGIN;
+orient getOrientationRaw() {
+    if (getSquareMagnitude(uBit.accelerometer.getX(), uBit.accelerometer.getY()) > VERT_MARGIN * VERT_MARGIN) {
+        return VERTICAL;
+    }
+    return HORIZONTAL;
 }
 
-bool isVerticalReal = false;
+/*
+ * Wait until we get VERT_SENS data points before registering a change in orientation
+ * @param (*onChange)(orientation o) callback function when orientation changes
+ */
+orient orientationReal = HORIZONTAL;
 int changedCount = 0;
-bool isVerticalBuffered() {
-    if (isVerticalRaw() ^ isVerticalReal) {
+orient getOrientationBuffered(void (*onChange)(orient o)) {
+    if (getOrientationRaw() ^ orientationReal) {
         changedCount++;
     } else {
         changedCount = 0;
-        return isVerticalReal;
+        return orientationReal;
     }
     if (changedCount > VERT_SENS) {
-        isVerticalReal = !isVerticalReal;
+        orientationReal = (orient) !orientationReal;
+        (*onChange)(orientationReal);
     }
-    return isVerticalReal;
+    return orientationReal;
 }
 
 void paradoxThatDrivesUsAll() {
@@ -107,16 +117,18 @@ void paradoxThatDrivesUsAll() {
         // uBit.serial.send("x: " + ManagedString(uBit.accelerometer.getX()) + "|");
         // uBit.serial.send("y: " + ManagedString(uBit.accelerometer.getY()) + "|");
         // uBit.serial.send("z: " + ManagedString(uBit.accelerometer.getZ()) + "\r\n");
-        uBit.serial.send(isVerticalBuffered());
+        uBit.serial.send(getOrientationBuffered([](orient o){
+                        uBit.serial.send(o);
+                        uBit.serial.send("Changed!\r\n");
+                    }));
         uBit.serial.send("\r\n");
-        // uBit.sleep(500);
     }
 }
 
 int main() {
     uBit.init();
 
-    aTimeForEverything();
+    paradoxThatDrivesUsAll();
 
     release_fiber();
 }
