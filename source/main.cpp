@@ -123,9 +123,9 @@ class Math {
  *   < HORIZONTAL_MARGIN: horizontal
  *   > HORIZONTAL_MARGIN: vertical
  */
-#define HORIZONTAL_MARGIN 600
+#define HORIZONTAL_MARGIN 512
 // Defines how many consecutive clean data points are captured before we register a change in verticality
-#define ORIENTATION_SENS 5
+#define ORIENTATION_SENS 20
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
 class OrientationManager {
@@ -172,7 +172,8 @@ struct Coord {
 
 class VerticalParadox {
     private:
-        int initialDegrees = -1; // uninitialized value
+        int initialIndex = -1; // uninitialized value
+        int prevIndex    = -1;
 
         /*
          * 0 represents the LED closest to buttonA.
@@ -210,36 +211,33 @@ class VerticalParadox {
         }
 
         // Draw the image required to print the ring around the perimeter.
-        void drawRing(int startDeg, int endDeg, RotationDir dir) {
+        void drawRing(int startIndex, int endIndex, RotationDir dir) {
             im.clear();
 
-            int i = startDeg / 20;
-            int endIndex = endDeg / 20;
-
-            while (i != endIndex) {
-                setImagePixel(i);
-                i -= dir;
-                i = Math::realMod(i, 18);
+            while (startIndex != endIndex) {
+                setImagePixel(startIndex);
+                startIndex -= dir;
+                startIndex = Math::realMod(startIndex, 18);
             };
-            setImagePixel(i);
+            setImagePixel(startIndex);
         }
     public:
         void runFrame() {
             int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-            if (initialDegrees == -1) initialDegrees = currDegrees;
-            drawRing(initialDegrees, currDegrees, CLOCKWISE);
+            int currIndex = currDegrees / 20;
+            if (initialIndex == -1) initialIndex = currIndex;
+            drawRing(initialIndex, currIndex, CLOCKWISE);
             uBit.display.print(im);
         }
 
         void reset() {
-            initialDegrees = -1;
+            initialIndex = -1;
         }
 } vertParadox;
 
 class HorizontalParadox {
     public:
         void runFrame() {
-            uBit.serial.send("run hori\r\n");
         }
 
         void reset() {
@@ -270,6 +268,7 @@ int main() {
     uBit.init();
 
     paradoxThatDrivesUsAll.run();
+    uBit.serial.send("running\r\n");
 
     release_fiber();
 }
