@@ -120,10 +120,10 @@ class Math {
 
 /* 
  * The margin of error for what we define as horizontal.
- *   < HORIZONTAL_MARGIN: horizontal
- *   > HORIZONTAL_MARGIN: vertical
+ *   |z| > HORIZONTAL_MARGIN: horizontal
+ *   |z| < HORIZONTAL_MARGIN: vertical
  */
-#define HORIZONTAL_MARGIN 512
+#define HORIZONTAL_MARGIN 800
 // Defines how many consecutive clean data points are captured before we register a change in verticality
 #define ORIENTATION_SENS 20
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
