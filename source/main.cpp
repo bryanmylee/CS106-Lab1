@@ -7,7 +7,6 @@ MicroBit uBit;
  */
 MicroBitImage im(5, 5);
 
-// MARK 1: Question 1
 class ExtendedButton {
     private:
         unsigned long lastPressed;
@@ -106,7 +105,7 @@ class Math {
         static double getDegrees(int x, int y) {
             return getRadians(x, y) / PI * 180;
         }
-        
+
         static int realMod(int x, int radix) {
             const int result = x % radix;
             return result >= 0 ? result : result + radix;
@@ -151,7 +150,7 @@ class HorizontalParadox {
             } else {
                 brightness = 0;
             }
-            im.setPixelValue(2 + xPos, 2 + yPos, brightness);
+            im.setPixelValue(2 + pos.x, 2 + pos.y, brightness);
         }
 
         void drawRotation() {
@@ -218,8 +217,8 @@ class HorizontalParadox {
         }
 
         void reset() {
-            xPos = 0;
-            yPos = 0;
+            pos.x = 0;
+            pos.y = 0;
             lastBlink = uBit.systemTime();
             nTurns = 0;
         }
