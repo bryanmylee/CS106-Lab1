@@ -121,26 +121,37 @@ struct Coord {
     int y;
 };
 
-#define TILT_SENS 250
-#define BLINK_DUR 500
+/*
+ * Defines how sensitive the dot movement is to tilting
+ * Lower values result in more sensitive movement
+ */
+#define TILT_SENS 100
+#define BLINK_DUR 250
+/*
+ * Constraints movement to either the X_AXIS or Y_AXIS.
+ * Movement between the two axis can only occur at (0, 0)
+ */
 enum TiltAxis { X_AXIS, Y_AXIS };
+enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
 class HorizontalParadox {
     private:
         TiltAxis currTiltAxis = X_AXIS;
-        int xIndex = 0;
-        int yIndex = 0;
+        Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
+        int nTurns = 0;
 
         void drawTilt() {
             unsigned long currTime = uBit.systemTime();
+            int brightness;
             if (currTime - lastBlink > 2 * BLINK_DUR) {
                 lastBlink = currTime;
             }
             if (currTime - lastBlink > BLINK_DUR) {
-                im.setPixelValue(2 + xIndex, 2 + yIndex, 255);
+                brightness = 255;
             } else {
-                im.setPixelValue(2 + xIndex, 2 + yIndex, 0);
+                brightness = 0;
             }
+            im.setPixelValue(2 + xPos, 2 + yPos, brightness);
         }
 
         void drawRotation() {
@@ -153,34 +164,43 @@ class HorizontalParadox {
         }
 
         void setTilt() {
-            int xIndexRaw = uBit.accelerometer.getX() / TILT_SENS;
-            int yIndexRaw = uBit.accelerometer.getY() / TILT_SENS;
+            Coord posRaw = {
+                uBit.accelerometer.getX() / TILT_SENS,
+                uBit.accelerometer.getY() / TILT_SENS
+            };
 
             if (currTiltAxis == X_AXIS) {
-                if (xIndexRaw != 0) {
-                    xIndex = xIndexRaw;
-                    yIndex = 0;
-                } else if (yIndexRaw != 0) {
-                    xIndex = 0;
-                    yIndex = yIndexRaw;
+                if (posRaw.x != 0) {
+                    pos.x = posRaw.x;
+                    pos.y = 0;
+                } else if (posRaw.y != 0) {
+                    pos.x = 0;
+                    pos.y = posRaw.y;
                     currTiltAxis = Y_AXIS;
                 } else {
-                    xIndex = 0;
-                    yIndex = 0;
+                    pos.x = 0;
+                    pos.y = 0;
                 }
             } else {
-                if (yIndexRaw != 0) {
-                    xIndex = 0;
-                    yIndex = yIndexRaw;
-                } else if (xIndexRaw != 0) {
-                    xIndex = xIndexRaw;
-                    yIndex = 0;
+                if (posRaw.y != 0) {
+                    pos.x = 0;
+                    pos.y = posRaw.y;
+                } else if (posRaw.x != 0) {
+                    pos.x = posRaw.x;
+                    pos.y = 0;
                     currTiltAxis = X_AXIS;
                 } else {
-                    xIndex = 0;
-                    yIndex = 0;
+                    pos.x = 0;
+                    pos.y = 0;
                 }
             }
+
+            if (pos.x > 2) pos.x = 2;
+            if (pos.x < -2) pos.x = -2;
+            if (pos.y > 2) pos.y = 2;
+            if (pos.y < -2) pos.y = -2;
+
+            if (Math::abs(pos.x) == 2 || Math::abs(pos.y) == 2) nTurns = 0;
         }
     public:
         void runFrame() {
@@ -198,9 +218,10 @@ class HorizontalParadox {
         }
 
         void reset() {
-            xIndex = 0;
-            yIndex = 0;
+            xPos = 0;
+            yPos = 0;
             lastBlink = uBit.systemTime();
+            nTurns = 0;
         }
 } horiParadox;
 
@@ -329,11 +350,10 @@ class VerticalParadox {
  *   |z| > HORIZONTAL_MARGIN: horizontal
  *   |z| < HORIZONTAL_MARGIN: vertical
  */
-#define HORIZONTAL_MARGIN 800
+#define HORIZONTAL_MARGIN 700
 // Defines how many consecutive clean data points are captured before we register a change in verticality
 #define ORIENTATION_SENS 20
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
-enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
 class OrientationManager {
     private:
         Orientation orientationReal = HORIZONTAL;
