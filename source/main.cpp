@@ -7,6 +7,7 @@ MicroBit uBit;
  */
 MicroBitImage im(5, 5);
 
+// MARK 1: Question 1
 class ExtendedButton {
     private:
         unsigned long lastPressed;
@@ -100,7 +101,7 @@ class Math {
         }
 
         /*
-         * @return degrees from 0 to 359
+         * @return degrees from 0 to <360
          */
         static double getDegrees(int x, int y) {
             return getRadians(x, y) / PI * 180;
@@ -110,11 +111,6 @@ class Math {
             const int result = x % radix;
             return result >= 0 ? result : result + radix;
         }
-
-        static bool diffSign(int x, int y) {
-            return (x ^ y) >> 31;
-        }
-
     private:
         Math() {}
 };
@@ -128,7 +124,7 @@ struct Coord {
  * Defines how sensitive the dot movement is to tilting
  * Lower values result in more sensitive movement
  */
-#define TILT_SENS 200
+#define TILT_SENS 250
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
 #define CHANGE_DIR_SENS 3
@@ -143,6 +139,7 @@ class HorizontalParadox {
         TiltAxis currTiltAxis = X_AXIS;
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
+
         int nTurns = 0;
         int prevHeading;
         int currHeading = -1; // uninitialized value
@@ -196,7 +193,7 @@ class HorizontalParadox {
          * Account for noise in data by validating resets.
          * If the number of turnbacks > CHANGE_DIR_SENS, then we register a reset
          */
-        void dirResetBuffered() {
+        void checkDirResetBuffered() {
             if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == prevHeading) {
                 nTurnBacks++;
             } else if (Math::realMod(prevHeading + currUBitDir, PERIMETER_LEN) == currHeading) {
@@ -204,7 +201,6 @@ class HorizontalParadox {
             }
             if (nTurnBacks < 0) nTurnBacks = 0;
             if (nTurnBacks > CHANGE_DIR_SENS) {
-                uBit.serial.send("A");
                 nTurns = 0;
                 nTurnBacks = 0;
             }
@@ -247,7 +243,6 @@ class HorizontalParadox {
             setCurrentHeading();
             setInitialHeading();
             setFirstHeading();
-            setCurrUBitDir();
         }
 
         void setTilt() {
@@ -288,7 +283,6 @@ class HorizontalParadox {
             if (pos.y < -2) pos.y = -2;
 
             if (Math::abs(pos.x) == 2 || Math::abs(pos.y) == 2) {
-                uBit.serial.send("B");
                 nTurns = 0;
             }
         }
@@ -296,10 +290,9 @@ class HorizontalParadox {
         void runFrame() {
             setTilt();
             setHeadings();
-            dirResetBuffered();
+            setCurrUBitDir();
+            checkDirResetBuffered();
             checkTurns();
-            uBit.serial.send(nTurns);
-            uBit.serial.send(" <--nTurns\r\n");
             drawComposite();
             uBit.display.print(im);
         }
@@ -358,8 +351,6 @@ class VerticalParadox {
 
         // Draw the image required to print the ring around the perimeter.
         void drawRing() {
-            im.clear();
-
             int i = initialIndex;
             while (i != currIndex) {
                 setImagePixel(i);
@@ -370,7 +361,6 @@ class VerticalParadox {
         }
 
         void drawCenter() {
-            im.clear();
             im.setPixelValue(2, 2, 255);
         }
 
@@ -416,6 +406,7 @@ class VerticalParadox {
             setCurrUBitDir();
             checkEndRun();
 
+            im.clear();
             if (endRun) {
                 drawCenter();
             } else {
@@ -450,6 +441,8 @@ class OrientationManager {
          * We can check for orientation by checking the magnitude of the vector <z>
          *      0: perfectly vertical
          *   1023: perfectly horizontal
+         * There are some flaws with this approach:
+         *   * Moving the uBit along its normal will result in this feature to fail
          */
         Orientation getOrientationRaw() {
             if (Math::abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
@@ -480,14 +473,17 @@ class OrientationManager {
 
 class ParadoxThatDrivesUsAll {
     private:
+        Orientation currOrient;
+
         static void onOrientationChange() {
             vertParadox.reset();
             horiParadox.reset();
         }
     public:
         void run() {
+            uBit.compass.calibrate();
             while (1) {
-                Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
+                currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
                     vertParadox.runFrame();
                 } else {
@@ -499,13 +495,9 @@ class ParadoxThatDrivesUsAll {
 
 int main() {
     uBit.init();
-    /* We can arbitrarily calibrate the compass since:
-     *   - no significant z-axis error is being introduced
-     *   - we don't care about the actual North, but relative rotation only
-     */
-    // uBit.compass.setCalibration(CompassCalibration());
-    uBit.compass.calibrate();
 
+    // Uncomment the lines below to test each question
+    // timeForEverything.run();
     paradoxThatDrivesUsAll.run();
 
     release_fiber();
