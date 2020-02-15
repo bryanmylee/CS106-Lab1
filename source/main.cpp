@@ -173,7 +173,7 @@ class HorizontalParadox {
         }
 
         void drawRotation() {
-
+            im.print('0' + nTurns);
         }
 
         void drawComposite() {
