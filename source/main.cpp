@@ -214,20 +214,17 @@ class VerticalParadox {
             im.setPixelValue(c.x, c.y, 255);
         }
 
-        /* 
-         * Draw the image required to print the ring around the perimeter.
-         * @param uBitDir the direction of the uBit device.
-         *                the ring will be drawn in the opposite direction
-         */
-        void drawRing(int startIndex, int endIndex, RotationDir uBitDir) {
+        // Draw the image required to print the ring around the perimeter.
+        void drawRing() {
             im.clear();
 
-            while (startIndex != endIndex) {
-                setImagePixel(startIndex);
-                startIndex -= uBitDir;
-                startIndex = Math::realMod(startIndex, PERIMETER_LEN);
+            int i = initialIndex;
+            while (i != currIndex) {
+                setImagePixel(i);
+                i -= currUBitDir;
+                i = Math::realMod(i, PERIMETER_LEN);
             };
-            setImagePixel(startIndex);
+            setImagePixel(i);
         }
 
         void drawCenter() {
