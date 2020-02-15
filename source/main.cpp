@@ -260,7 +260,7 @@ class VerticalParadox {
             if (endRun) {
                 drawCenter();
             } else {
-                drawRing(initialIndex, currIndex, currUBitDir);
+                drawRing();
             }
             uBit.display.print(im);
         }
