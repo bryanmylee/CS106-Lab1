@@ -131,7 +131,7 @@ struct Coord {
 #define TILT_SENS 100
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
-#define CHANGE_DIR_SENS 20
+#define CHANGE_DIR_SENS 3
 /*
  * Constraints movement to either the X_AXIS or Y_AXIS.
  * Movement between the two axis can only occur at (0, 0)
@@ -144,12 +144,12 @@ class HorizontalParadox {
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
         int nTurns = 0;
-        int prevHeading = -1;
-        int currHeading = -1;
-        int initialHeading = -1; // uninitialized value
+        int prevHeading;
+        int currHeading = -1; // uninitialized value
+        int initialHeading = -1;
         int firstHeading = -1;
         RotationDir currUBitDir;
-        int maxHeading = -1;
+        int nTurnBacks = 0;
 
         void drawTilt() {
             unsigned long currTime = uBit.systemTime();
@@ -173,37 +173,21 @@ class HorizontalParadox {
             drawRotation();
             drawTilt();
         }
-        // void checkDir(void (*onChangeDir)()) {
-        //     if (currHeading )
-        // }
 
-        void setMaxHeading() {
-            if (maxHeading == -1) {
-                maxHeading = currHeading;
-                return;
-            };
-
-            // Add PERIMETER_LEN if we have to deal with any ranges across 0 
-            int adjCurrHeading = currHeading;
-            int adjPrevHeading = prevHeading;
-            if (adjCurrHeading < 4 && adjPrevHeading > 13) adjCurrHeading += PERIMETER_LEN;
-            if (adjCurrHeading > 13 && adjPrevHeading < 4) adjPrevHeading += PERIMETER_LEN;
-
-            // If the current heading turns back and passes the previous heading
-            if (Math::diffSign(currUBitDir, adjCurrHeading - adjPrevHeading)) {
-                int adjMaxHeading = maxHeading;
-                if (adjMaxHeading < 4 && adjPrevHeading > 13) adjMaxHeading += PERIMETER_LEN;
-                if (adjMaxHeading > 13 && adjPrevHeading < 4) adjPrevHeading += PERIMETER_LEN;
-                if (Math::diffSign(currUBitDir, maxHeading - prevHeading)) {
-                    maxHeading = prevHeading;
-                }
-            } else {
-                int adjMaxHeading = maxHeading;
-                if (adjMaxHeading < 4 && adjCurrHeading > 13) adjMaxHeading += PERIMETER_LEN;
-                if (adjMaxHeading > 13 && adjCurrHeading < 4) adjCurrHeading += PERIMETER_LEN;
-                if (Math::diffSign(currUBitDir, maxHeading - currHeading)) {
-                    maxHeading = currHeading;
-                }
+        /*
+         * Account for noise in data by validating resets.
+         * If the number of turnbacks > CHANGE_DIR_SENS, then we register a reset
+         */
+        void dirResetBuffered() {
+            if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == prevHeading) {
+                nTurnBacks++;
+            } else if (Math::realMod(prevHeading + currUBitDir, PERIMETER_LEN) == currHeading) {
+                nTurnBacks--;
+            }
+            if (nTurnBacks < 0) nTurnBacks = 0;
+            if (nTurnBacks > CHANGE_DIR_SENS) {
+                nTurns = 0;
+                nTurnBacks = 0;
             }
         }
 
@@ -237,6 +221,14 @@ class HorizontalParadox {
             } else {
                 prevHeading = currHeading;
             }
+        }
+
+        void setHeadings() {
+            setPrevHeading();
+            setCurrentHeading();
+            setInitialHeading();
+            setFirstHeading();
+            setCurrUBitDir();
         }
 
         void setTilt() {
@@ -281,20 +273,10 @@ class HorizontalParadox {
     public:
         void runFrame() {
             setTilt();
-            setPrevHeading();
-            setCurrentHeading();
-            setInitialHeading();
-            setFirstHeading();
-            setCurrUBitDir();
-            setMaxHeading();
+            setHeadings();
+            dirResetBuffered();
             drawComposite();
             uBit.display.print(im);
-            uBit.serial.send(currHeading);
-            uBit.serial.send(" <--currHeading, ");
-            uBit.serial.send(currUBitDir);
-            uBit.serial.send(" <--currUBitDir, ");
-            uBit.serial.send(maxHeading);
-            uBit.serial.send(" <--maxHeading\r\n");
         }
 
         void reset() {
