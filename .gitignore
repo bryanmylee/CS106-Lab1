@@ -1,0 +1,6 @@
+compile-flash.sh
+build
+.yotta.json
+yotta_modules
+yotta_targets
+.ccls
