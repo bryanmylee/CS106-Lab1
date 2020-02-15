@@ -32,36 +32,38 @@ class ExtendedButton {
         }
 };
 
-void countdown(int start) {
-    while (start > 0) {
-        uBit.sleep(1000);
-        start--;
-        uBit.display.print(start);
-    }
-}
+class TimeForEverything {
+    private:
+        ExtendedButton buttonA = ExtendedButton(&uBit.buttonA, 500);
+        ExtendedButton buttonB = ExtendedButton(&uBit.buttonB, 500);
 
-void timeForEverything() {
-    ExtendedButton buttonA = ExtendedButton(&uBit.buttonA, 500);
-    ExtendedButton buttonB = ExtendedButton(&uBit.buttonB, 500);
+        void countdown(int start) {
+            while (start > 0) {
+                uBit.sleep(1000);
+                start--;
+                uBit.display.print(start);
+            }
+        }
 
-    int x = 5;
+    public:
+        void run() {
+            int x = 5;
 
-    while (1) {
-        uBit.display.print(x);
-        if (buttonA.onPress()) {
-            uBit.serial.send("A");
-            if (x > 1) x--;
+            while (1) {
+                uBit.display.print(x);
+                if (buttonA.onPress()) {
+                    if (x > 1) x--;
+                }
+                if (buttonB.onPress()) {
+                    if (x < 9) x++;
+                }
+                if (uBit.buttonAB.isPressed()) {
+                    countdown(x);
+                    break;
+                }
+            }
         }
-        if (buttonB.onPress()) {
-            uBit.serial.send("B");
-            if (x < 9) x++;
-        }
-        if (uBit.buttonAB.isPressed()) {
-            countdown(x);
-            break;
-        }
-    }
-}
+} timeForEverything;
 
 
 // MARK 2: Question 2
@@ -77,35 +79,41 @@ void timeForEverything() {
 
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 
-int abs(int x) {
-    return x >= 0 ? x : -x;
-}
-
-double arctan(double x) {
-    if (x < 0) return -arctan(-x);
-    if (x > 1) return PI / 2 - arctan(1 / x);
-    if (x > 2 - SQRT3) return PI / 6 + arctan((SQRT3 * x - 1) / (SQRT3 + x));
-    return x - x * x * x / 3 + x * x * x * x * x / 5;
-}
-
-double getRadians(int x, int y) {
-    /*
-     * If x ~= 0, then y / x becomes very large.
-     * To avoid that, we take the smaller ratio, and offset from PI / 2 instead.
-     */
-    if (y >= 0) {
-        if (x >= y) {
-            return arctan((double) y / x);
+class Math {
+    public:
+        static int abs(int x) {
+            return x >= 0 ? x : -x;
         }
-        return PI / 2 - arctan((double) x / y);
-    }
-    // tan has a periodicity of PI, so we have to offset by PI to get the full 2PI radians.
-    return PI + getRadians(-x, -y);
-}
 
-double getDegrees(int x, int y) {
-    return getRadians(x, y) / PI * 180;
-}
+        static double arctan(double x) {
+            if (x < 0) return -arctan(-x);
+            if (x > 1) return PI / 2 - arctan(1 / x);
+            if (x > 2 - SQRT3) return PI / 6 + arctan((SQRT3 * x - 1) / (SQRT3 + x));
+            return x - x * x * x / 3 + x * x * x * x * x / 5;
+        }
+
+        static double getRadians(int x, int y) {
+            /*
+             * If x ~= 0, then y / x becomes very large.
+             * To avoid that, we take the smaller ratio, and offset from PI / 2 instead.
+             */
+            if (y >= 0) {
+                if (x >= y) {
+                    return arctan((double) y / x);
+                }
+                return PI / 2 - arctan((double) x / y);
+            }
+            // tan has a periodicity of PI, so we have to offset by PI to get the full 2PI radians.
+            return PI + getRadians(-x, -y);
+        }
+
+        static double getDegrees(int x, int y) {
+            return getRadians(x, y) / PI * 180;
+        }
+
+    private:
+        Math() {}
+};
 
 class OrientationManager {
     private:
@@ -118,7 +126,7 @@ class OrientationManager {
          *   1023: perfectly horizontal
          */
         Orientation getOrientationRaw() {
-            if (abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
+            if (Math::abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
                 return HORIZONTAL;
             }
             return VERTICAL;
@@ -151,7 +159,7 @@ class OrientationManager {
 class VerticalParadox {
     public:
         void run() {
-            int degrees = (int) getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
+            int degrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
             int modDegrees = degrees % 360;
             uBit.serial.send(modDegrees);
             uBit.serial.send("\r\n");
@@ -191,7 +199,7 @@ void paradoxThatDrivesUsAll() {
 int main() {
     uBit.init();
 
-    paradoxThatDrivesUsAll();
+    timeForEverything.run();
 
     release_fiber();
 }
