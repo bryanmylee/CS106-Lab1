@@ -71,8 +71,6 @@ class TimeForEverything {
 
 
 // MARK 2: Question 2
-#define IMAGE_SIZE 5
-
 #define SQRT3 1.7320508
 class Math {
     public:
