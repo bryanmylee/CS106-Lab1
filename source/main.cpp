@@ -1,6 +1,11 @@
 #include "MicroBit.h"
 
 MicroBit uBit;
+/* 
+ * Initialization of MicroBitImage seems to be a little broken,
+ * so we will settle with reusing one image instead.
+ */
+MicroBitImage im(5, 5);
 
 // MARK 1: Question 1
 class ExtendedButton {
@@ -66,18 +71,9 @@ class TimeForEverything {
 
 
 // MARK 2: Question 2
-/* 
- * The margin of error for what we define as vertical.
- *   0   : perfectly horizontal
- *   1000: perfectly vertical
- */
-#define HORIZONTAL_MARGIN 600
-// Defines how many consecutive clean data points are captured before we register a change in verticality
-#define ORIENTATION_SENS 20
+#define IMAGE_SIZE 5
+
 #define SQRT3 1.7320508
-
-enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
-
 class Math {
     public:
         static int abs(int x) {
@@ -106,14 +102,32 @@ class Math {
             return PI + getRadians(-x, -y);
         }
 
+        /*
+         * @return degrees from 0 to 359
+         */
         static double getDegrees(int x, int y) {
             return getRadians(x, y) / PI * 180;
+        }
+        
+        static int realMod(int x, int radix) {
+            const int result = x % radix;
+            return result >= 0 ? result : result + radix;
         }
 
     private:
         Math() {}
 };
 
+/* 
+ * The margin of error for what we define as horizontal.
+ *   < HORIZONTAL_MARGIN: horizontal
+ *   > HORIZONTAL_MARGIN: vertical
+ */
+#define HORIZONTAL_MARGIN 600
+// Defines how many consecutive clean data points are captured before we register a change in verticality
+#define ORIENTATION_SENS 5
+enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
+enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
 class OrientationManager {
     private:
         Orientation orientationReal = HORIZONTAL;
@@ -151,22 +165,84 @@ class OrientationManager {
         }
 } orientationManager;
 
+struct Coord {
+    int x;
+    int y;
+};
+
 class VerticalParadox {
+    private:
+        int initialDegrees = -1; // uninitialized value
+
+        /*
+         * 0 represents the LED closest to buttonA.
+         * Every subsequent index wraps around the perimeter clockwise.
+         */
+        Coord getPixelCoord(int index) {
+            Coord c;
+            switch (index) {
+                case 0: c.x = 0; c.y = 2; break;
+                case 1: c.x = 0; c.y = 1; break;
+                case 2: c.x = 0; c.y = 0; break;
+                case 3: c.x = 1; c.y = 0; break;
+                case 4: c.x = 2; c.y = 0; break;
+                case 5: c.x = 3; c.y = 0; break;
+                case 6: c.x = 4; c.y = 0; break;
+                case 7: c.x = 4; c.y = 1; break;
+                case 8: c.x = 4; c.y = 2; break;
+                case 9: c.x = 4; c.y = 3; break;
+                case 10: c.x = 4; c.y = 4; break;
+                case 11: c.x = 3; c.y = 4; break;
+                case 12: c.x = 2; c.y = 4; break;
+                case 13: c.x = 1; c.y = 4; break;
+                case 14: c.x = 0; c.y = 4; break;
+                case 15: c.x = 0; c.y = 3; break;
+                case 16: c.x = 0; c.y = 2; break;
+                case 17: c.x = 0; c.y = 1; break;
+            }
+            return c;
+        }
+
+        void setImagePixel(int index) {
+            Coord c = getPixelCoord(index);
+            im.setPixelValue(c.x, c.y, 255);
+        }
+
+        void drawRing(int startDeg, int endDeg, RotationDir dir) {
+            im.clear();
+
+            int i = startDeg / 20;
+            int endIndex = endDeg / 20;
+
+            while (i != endIndex) {
+                setImagePixel(i);
+                uBit.serial.send(i);
+                uBit.serial.send(",");
+                i -= dir;
+                i = Math::realMod(i, 18);
+            };
+            uBit.serial.send(i);
+            uBit.serial.send(" <--sequence\r\n");
+            setImagePixel(i);
+        }
     public:
-        void run() {
-            int degrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-            int modDegrees = degrees % 360;
-            uBit.serial.send(modDegrees);
-            uBit.serial.send("\r\n");
+        void runFrame() {
+            int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
+            if (initialDegrees == -1) initialDegrees = currDegrees;
+            // uBit.serial.send(Math::realMod(currDegrees - initialDegrees, 360));
+            // uBit.serial.send("\r\n");
+            drawRing(initialDegrees, currDegrees, CLOCKWISE);
+            uBit.display.print(im);
         }
 
         void reset() {
+            initialDegrees = -1;
         }
 } vertParadox;
 
 class HorizontalParadox {
     public:
-        void run() {
+        void runFrame() {
             uBit.serial.send("run hori\r\n");
         }
 
@@ -186,9 +262,9 @@ class ParadoxThatDrivesUsAll {
             while (1) {
                 Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
-                    vertParadox.run();
+                    vertParadox.runFrame();
                 } else {
-                    horiParadox.run();
+                    horiParadox.runFrame();
                 }
             }
         }
