@@ -128,7 +128,7 @@ struct Coord {
  * Defines how sensitive the dot movement is to tilting
  * Lower values result in more sensitive movement
  */
-#define TILT_SENS 100
+#define TILT_SENS 200
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
 #define CHANGE_DIR_SENS 3
@@ -151,6 +151,13 @@ class HorizontalParadox {
         RotationDir currUBitDir;
         int nTurnBacks = 0;
 
+        void resetRotation() {
+            currHeading = -1;
+            initialHeading = -1;
+            firstHeading = -1;
+            nTurnBacks = 0;
+        }
+
         void drawTilt() {
             unsigned long currTime = uBit.systemTime();
             int brightness;
@@ -166,12 +173,23 @@ class HorizontalParadox {
         }
 
         void drawRotation() {
+
         }
 
         void drawComposite() {
             im.clear();
             drawRotation();
             drawTilt();
+        }
+
+        void checkTurns() {
+            if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == initialHeading) {
+                nTurns++;
+                // Assumption being made since values larger than 9 will 
+                // cause the display to sequentially display each digit.
+                if (nTurns > 9) nTurns = 9;
+                resetRotation();
+            }
         }
 
         /*
@@ -186,6 +204,7 @@ class HorizontalParadox {
             }
             if (nTurnBacks < 0) nTurnBacks = 0;
             if (nTurnBacks > CHANGE_DIR_SENS) {
+                uBit.serial.send("A");
                 nTurns = 0;
                 nTurnBacks = 0;
             }
@@ -268,13 +287,19 @@ class HorizontalParadox {
             if (pos.y > 2) pos.y = 2;
             if (pos.y < -2) pos.y = -2;
 
-            if (Math::abs(pos.x) == 2 || Math::abs(pos.y) == 2) nTurns = 0;
+            if (Math::abs(pos.x) == 2 || Math::abs(pos.y) == 2) {
+                uBit.serial.send("B");
+                nTurns = 0;
+            }
         }
     public:
         void runFrame() {
             setTilt();
             setHeadings();
             dirResetBuffered();
+            checkTurns();
+            uBit.serial.send(nTurns);
+            uBit.serial.send(" <--nTurns\r\n");
             drawComposite();
             uBit.display.print(im);
         }
@@ -284,9 +309,7 @@ class HorizontalParadox {
             pos.y = 0;
             lastBlink = uBit.systemTime();
             nTurns = 0;
-            initialHeading = -1;
-            currHeading = -1;
-            firstHeading = -1;
+            resetRotation();
         }
 } horiParadox;
 
