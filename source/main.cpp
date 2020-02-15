@@ -285,21 +285,18 @@ class HorizontalParadox {
 class ParadoxThatDrivesUsAll {
     private:
         static void onOrientationChange() {
-            uBit.display.printChar(' ');
             vertParadox.reset();
             horiParadox.reset();
         }
     public:
         void run() {
             while (1) {
-                uBit.serial.send("running:");
                 Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
                     vertParadox.runFrame();
                 } else {
                     horiParadox.runFrame();
                 }
-                uBit.serial.send("\r\n");
             }
         }
 } paradoxThatDrivesUsAll;
