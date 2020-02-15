@@ -74,7 +74,7 @@ void aTimeForEverything() {
 // Defines how many consecutive clean data points are captured before we register a change in verticality
 #define VERT_SENS 20
 
-enum orient { HORIZONTAL=false, VERTICAL=true };
+enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 
 int getSquareMagnitude(int x, int y) {
     return x * x + y * y;
@@ -85,7 +85,7 @@ int getSquareMagnitude(int x, int y) {
  *   0   : perfectly horizontal
  *   1000: perfectly vertical
  */
-orient getOrientationRaw() {
+Orientation getOrientationRaw() {
     if (getSquareMagnitude(uBit.accelerometer.getX(), uBit.accelerometer.getY()) > VERT_MARGIN * VERT_MARGIN) {
         return VERTICAL;
     }
@@ -94,11 +94,12 @@ orient getOrientationRaw() {
 
 /*
  * Wait until we get VERT_SENS data points before registering a change in orientation
- * @param (*onChange)(orientation o) callback function when orientation changes
+ *
+ * @param (*onChange)() callback function when orientation changes
  */
-orient orientationReal = HORIZONTAL;
+Orientation orientationReal = HORIZONTAL;
 int changedCount = 0;
-orient getOrientationBuffered(void (*onChange)(orient o)) {
+Orientation getOrientationBuffered(void (*onChange)()) {
     if (getOrientationRaw() ^ orientationReal) {
         changedCount++;
     } else {
@@ -106,10 +107,18 @@ orient getOrientationBuffered(void (*onChange)(orient o)) {
         return orientationReal;
     }
     if (changedCount > VERT_SENS) {
-        orientationReal = (orient) !orientationReal;
-        (*onChange)(orientationReal);
+        orientationReal = (Orientation) !orientationReal;
+        (*onChange)();
     }
     return orientationReal;
+}
+
+Orientation getOrientationBuffered() {
+    return getOrientationBuffered([](){});
+}
+
+void onOrientationChange() {
+    uBit.display.printChar(' ');
 }
 
 void paradoxThatDrivesUsAll() {
@@ -117,10 +126,9 @@ void paradoxThatDrivesUsAll() {
         // uBit.serial.send("x: " + ManagedString(uBit.accelerometer.getX()) + "|");
         // uBit.serial.send("y: " + ManagedString(uBit.accelerometer.getY()) + "|");
         // uBit.serial.send("z: " + ManagedString(uBit.accelerometer.getZ()) + "\r\n");
-        uBit.serial.send(getOrientationBuffered([](orient o){
-                        uBit.serial.send(o);
-                        uBit.serial.send("Changed!\r\n");
-                    }));
+
+        Orientation currOrient = getOrientationBuffered(&onOrientationChange);
+        uBit.serial.send(currOrient);
         uBit.serial.send("\r\n");
     }
 }
