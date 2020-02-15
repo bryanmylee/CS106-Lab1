@@ -118,57 +118,93 @@ class Math {
         Math() {}
 };
 
-/* 
- * The margin of error for what we define as horizontal.
- *   |z| > HORIZONTAL_MARGIN: horizontal
- *   |z| < HORIZONTAL_MARGIN: vertical
- */
-#define HORIZONTAL_MARGIN 800
-// Defines how many consecutive clean data points are captured before we register a change in verticality
-#define ORIENTATION_SENS 20
-enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
-enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
-class OrientationManager {
-    private:
-        Orientation orientationReal = HORIZONTAL;
-        int changedCount = 0;
-
-        /* 
-         * We can check for orientation by checking the magnitude of the vector <z>
-         *      0: perfectly vertical
-         *   1023: perfectly horizontal
-         */
-        Orientation getOrientationRaw() {
-            if (Math::abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
-                return HORIZONTAL;
-            }
-            return VERTICAL;
-        }
-    public:
-        /*
-         * Wait until we get VERT_SENS data points before registering a change in orientation
-         *
-         * @param (*onChange)() callback function when orientation changes
-         */
-        Orientation getOrientationBuffered(void (*onChange)()) {
-            if (getOrientationRaw() ^ orientationReal) {
-                changedCount++;
-            } else {
-                changedCount = 0;
-                return orientationReal;
-            }
-            if (changedCount > ORIENTATION_SENS) {
-                orientationReal = (Orientation) !orientationReal;
-                (*onChange)();
-            }
-            return orientationReal;
-        }
-} orientationManager;
-
 struct Coord {
     int x;
     int y;
 };
+
+#define TILT_SENS 250
+#define BLINK_DUR 500
+enum TiltAxis { X_AXIS, Y_AXIS };
+class HorizontalParadox {
+    private:
+        TiltAxis currTiltAxis = X_AXIS;
+        int xIndex = 0;
+        int yIndex = 0;
+        unsigned long lastBlink = uBit.systemTime();
+
+        void drawTilt() {
+            unsigned long currTime = uBit.systemTime();
+            if (currTime - lastBlink > 2 * BLINK_DUR) {
+                lastBlink = currTime;
+            }
+            if (currTime - lastBlink > BLINK_DUR) {
+                im.setPixelValue(2 + xIndex, 2 + yIndex, 255);
+            } else {
+                im.setPixelValue(2 + xIndex, 2 + yIndex, 0);
+            }
+        }
+
+        void drawRotation() {
+        }
+
+        void drawComposite() {
+            im.clear();
+            drawRotation();
+            drawTilt();
+        }
+
+        void setTilt() {
+            int xIndexRaw = uBit.accelerometer.getX() / TILT_SENS;
+            int yIndexRaw = uBit.accelerometer.getY() / TILT_SENS;
+
+            if (currTiltAxis == X_AXIS) {
+                if (xIndexRaw != 0) {
+                    xIndex = xIndexRaw;
+                    yIndex = 0;
+                } else if (yIndexRaw != 0) {
+                    xIndex = 0;
+                    yIndex = yIndexRaw;
+                    currTiltAxis = Y_AXIS;
+                } else {
+                    xIndex = 0;
+                    yIndex = 0;
+                }
+            } else {
+                if (yIndexRaw != 0) {
+                    xIndex = 0;
+                    yIndex = yIndexRaw;
+                } else if (xIndexRaw != 0) {
+                    xIndex = xIndexRaw;
+                    yIndex = 0;
+                    currTiltAxis = X_AXIS;
+                } else {
+                    xIndex = 0;
+                    yIndex = 0;
+                }
+            }
+        }
+    public:
+        void runFrame() {
+            setTilt();
+            drawComposite();
+            uBit.display.print(im);
+
+            // uBit.serial.send("x: ");
+            // uBit.serial.send(uBit.accelerometer.getX());
+            // uBit.serial.send(", y: ");
+            // uBit.serial.send(uBit.accelerometer.getY());
+            // uBit.serial.send(", z: ");
+            // uBit.serial.send(uBit.accelerometer.getZ());
+            // uBit.serial.send("\r\n");
+        }
+
+        void reset() {
+            xIndex = 0;
+            yIndex = 0;
+            lastBlink = uBit.systemTime();
+        }
+} horiParadox;
 
 #define PERIMETER_LEN 18
 class VerticalParadox {
@@ -231,12 +267,22 @@ class VerticalParadox {
             im.clear();
             im.setPixelValue(2, 2, 255);
         }
-    public:
-        void runFrame() {
-            int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-            currIndex = currDegrees / 20; // 20 degrees per pixel
-            if (initialIndex == -1) initialIndex = currIndex;
 
+        void checkEndRun() {
+            if (currIndex == Math::realMod(initialIndex + currUBitDir, PERIMETER_LEN)) {
+                endRun = true;
+            }
+        }
+
+        void setCurrUBitDir() {
+            if (Math::realMod(firstIndex - initialIndex, PERIMETER_LEN) == 1) {
+                currUBitDir = COUNTERCLOCKWISE;
+            } else {
+                currUBitDir = CLOCKWISE;
+            }
+        }
+
+        void setFirstIndex() {
             /*
              * Whenever stepping out from the initialIndex, we store 
              * the firstIndex to keep track of our intended direction.
@@ -246,16 +292,23 @@ class VerticalParadox {
             } else if (currIndex == initialIndex) {
                 firstIndex = -1;
             }
+        }
 
-            if (Math::realMod(firstIndex - initialIndex, PERIMETER_LEN) == 1) {
-                currUBitDir = COUNTERCLOCKWISE;
-            } else {
-                currUBitDir = CLOCKWISE;
-            }
+        void setInitialIndex() {
+            if (initialIndex == -1) initialIndex = currIndex;
+        }
 
-            if (currIndex == Math::realMod(initialIndex + currUBitDir, PERIMETER_LEN)) {
-                endRun = true;
-            }
+        void setCurrIndex() {
+            int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
+            currIndex = currDegrees / 20; // 20 degrees per pixel
+        }
+    public:
+        void runFrame() {
+            setCurrIndex();
+            setInitialIndex();
+            setFirstIndex();
+            setCurrUBitDir();
+            checkEndRun();
 
             if (endRun) {
                 drawCenter();
@@ -273,75 +326,52 @@ class VerticalParadox {
         }
 } vertParadox;
 
-#define TILT_SENS 250
-enum TiltAxis { X_AXIS, Y_AXIS };
-class HorizontalParadox {
+/* 
+ * The margin of error for what we define as horizontal.
+ *   |z| > HORIZONTAL_MARGIN: horizontal
+ *   |z| < HORIZONTAL_MARGIN: vertical
+ */
+#define HORIZONTAL_MARGIN 800
+// Defines how many consecutive clean data points are captured before we register a change in verticality
+#define ORIENTATION_SENS 20
+enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
+enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
+class OrientationManager {
     private:
-        TiltAxis currTiltAxis = X_AXIS;
-        int xIndex = 0;
-        int yIndex = 0;
+        Orientation orientationReal = HORIZONTAL;
+        int changedCount = 0;
 
-        void drawTilt() {
-            im.setPixelValue(2 + xIndex, 2 + yIndex, 255);
-        }
-
-        void drawRotation() {
-        }
-
-        void drawComposite() {
-            im.clear();
-            drawRotation();
-            drawTilt();
-        }
-
-        void setTilt() {
-            int xIndexRaw = uBit.accelerometer.getX() / TILT_SENS;
-            int yIndexRaw = uBit.accelerometer.getY() / TILT_SENS;
-
-            if (currTiltAxis == X_AXIS) {
-                if (xIndexRaw != 0) {
-                    xIndex = xIndexRaw;
-                    yIndex = 0;
-                } else if (yIndexRaw != 0) {
-                    xIndex = 0;
-                    yIndex = yIndexRaw;
-                    currTiltAxis = Y_AXIS;
-                } else {
-                    xIndex = 0;
-                    yIndex = 0;
-                }
-            } else {
-                if (yIndexRaw != 0) {
-                    xIndex = 0;
-                    yIndex = yIndexRaw;
-                } else if (xIndexRaw != 0) {
-                    xIndex = xIndexRaw;
-                    yIndex = 0;
-                    currTiltAxis = X_AXIS;
-                } else {
-                    xIndex = 0;
-                    yIndex = 0;
-                }
+        /* 
+         * We can check for orientation by checking the magnitude of the vector <z>
+         *      0: perfectly vertical
+         *   1023: perfectly horizontal
+         */
+        Orientation getOrientationRaw() {
+            if (Math::abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
+                return HORIZONTAL;
             }
+            return VERTICAL;
         }
     public:
-        void runFrame() {
-            setTilt();
-            drawComposite();
-            uBit.display.print(im);
-
-            // uBit.serial.send("x: ");
-            // uBit.serial.send(uBit.accelerometer.getX());
-            // uBit.serial.send(", y: ");
-            // uBit.serial.send(uBit.accelerometer.getY());
-            // uBit.serial.send(", z: ");
-            // uBit.serial.send(uBit.accelerometer.getZ());
-            // uBit.serial.send("\r\n");
+        /*
+         * Wait until we get VERT_SENS data points before registering a change in orientation
+         *
+         * @param (*onChange)() callback function when orientation changes
+         */
+        Orientation getOrientationBuffered(void (*onChange)()) {
+            if (getOrientationRaw() ^ orientationReal) {
+                changedCount++;
+            } else {
+                changedCount = 0;
+                return orientationReal;
+            }
+            if (changedCount > ORIENTATION_SENS) {
+                orientationReal = (Orientation) !orientationReal;
+                (*onChange)();
+            }
+            return orientationReal;
         }
-
-        void reset() {
-        }
-} horiParadox;
+} orientationManager;
 
 class ParadoxThatDrivesUsAll {
     private:
