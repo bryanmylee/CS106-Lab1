@@ -179,11 +179,6 @@ class VerticalParadox {
         RotationDir currUBitDir = CLOCKWISE; // direction of the uBit device, not the ring drawn
         bool endRun = false;
 
-        void drawCenter() {
-            im.clear();
-            im.setPixelValue(2, 2, 255);
-        }
-
         /*
          * 0 represents the LED closest to buttonA.
          * Every subsequent index wraps around the perimeter clockwise.
@@ -233,6 +228,11 @@ class VerticalParadox {
                 startIndex = Math::realMod(startIndex, PERIMETER_LEN);
             };
             setImagePixel(startIndex);
+        }
+
+        void drawCenter() {
+            im.clear();
+            im.setPixelValue(2, 2, 255);
         }
     public:
         void runFrame() {
