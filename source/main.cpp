@@ -111,6 +111,10 @@ class Math {
             return result >= 0 ? result : result + radix;
         }
 
+        static bool diffSign(int x, int y) {
+            return (x ^ y) >> 31;
+        }
+
     private:
         Math() {}
 };
@@ -126,6 +130,8 @@ struct Coord {
  */
 #define TILT_SENS 100
 #define BLINK_DUR 250
+#define PERIMETER_LEN 18
+#define CHANGE_DIR_SENS 20
 /*
  * Constraints movement to either the X_AXIS or Y_AXIS.
  * Movement between the two axis can only occur at (0, 0)
@@ -138,6 +144,12 @@ class HorizontalParadox {
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
         int nTurns = 0;
+        int prevHeading = -1;
+        int currHeading = -1;
+        int initialHeading = -1; // uninitialized value
+        int firstHeading = -1;
+        RotationDir currUBitDir;
+        int maxHeading = -1;
 
         void drawTilt() {
             unsigned long currTime = uBit.systemTime();
@@ -160,6 +172,66 @@ class HorizontalParadox {
             im.clear();
             drawRotation();
             drawTilt();
+        }
+        // void checkDir(void (*onChangeDir)()) {
+        //     if (currHeading )
+        // }
+
+        void setMaxHeading() {
+            if (maxHeading == -1) {
+                maxHeading = currHeading;
+                return;
+            };
+
+            // Add PERIMETER_LEN if we have to deal with any ranges across 0 
+            int adjCurrHeading = currHeading;
+            int adjPrevHeading = prevHeading;
+            if (adjCurrHeading < 4 && adjPrevHeading > 13) adjCurrHeading += PERIMETER_LEN;
+            if (adjCurrHeading > 13 && adjPrevHeading < 4) adjPrevHeading += PERIMETER_LEN;
+
+            // If the current heading turns back and passes the previous heading
+            if (Math::diffSign(currUBitDir, adjCurrHeading - adjPrevHeading)) {
+                maxHeading = prevHeading;
+            } else {
+                int adjMaxHeading = maxHeading;
+                if (adjMaxHeading < 4 && adjCurrHeading > 13) adjMaxHeading += PERIMETER_LEN;
+                if (adjMaxHeading > 13 && adjCurrHeading < 4) adjCurrHeading += PERIMETER_LEN;
+                if (Math::diffSign(currUBitDir, maxHeading - currHeading)) {
+                    maxHeading = currHeading;
+                }
+            }
+        }
+
+        void setCurrUBitDir() {
+            if (Math::realMod(firstHeading - initialHeading, PERIMETER_LEN) == 1) {
+                currUBitDir = CLOCKWISE;
+            } else {
+                currUBitDir = COUNTERCLOCKWISE;
+            }
+        }
+
+        void setFirstHeading() {
+            if (firstHeading == -1 && currHeading != initialHeading) {
+                firstHeading = currHeading;
+            } else if (currHeading == initialHeading) {
+                firstHeading = -1;
+            }
+        }
+
+        void setInitialHeading() {
+            if (initialHeading == -1) initialHeading = currHeading;
+        }
+
+        void setCurrentHeading() {
+            currHeading = uBit.compass.heading() / 20;
+        }
+
+        void setPrevHeading() {
+            if (currHeading == -1) {
+                prevHeading = uBit.compass.heading() / 20;
+            } else {
+                prevHeading = currHeading;
+            }
         }
 
         void setTilt() {
@@ -204,16 +276,20 @@ class HorizontalParadox {
     public:
         void runFrame() {
             setTilt();
+            setPrevHeading();
+            setCurrentHeading();
+            setInitialHeading();
+            setFirstHeading();
+            setCurrUBitDir();
+            setMaxHeading();
             drawComposite();
             uBit.display.print(im);
-
-            // uBit.serial.send("x: ");
-            // uBit.serial.send(uBit.accelerometer.getX());
-            // uBit.serial.send(", y: ");
-            // uBit.serial.send(uBit.accelerometer.getY());
-            // uBit.serial.send(", z: ");
-            // uBit.serial.send(uBit.accelerometer.getZ());
-            // uBit.serial.send("\r\n");
+            uBit.serial.send(currHeading);
+            uBit.serial.send(" <--currHeading, ");
+            uBit.serial.send(currUBitDir);
+            uBit.serial.send(" <--currUBitDir, ");
+            uBit.serial.send(maxHeading);
+            uBit.serial.send(" <--maxHeading\r\n");
         }
 
         void reset() {
@@ -221,16 +297,18 @@ class HorizontalParadox {
             pos.y = 0;
             lastBlink = uBit.systemTime();
             nTurns = 0;
+            initialHeading = -1;
+            currHeading = -1;
+            firstHeading = -1;
         }
 } horiParadox;
 
-#define PERIMETER_LEN 18
 class VerticalParadox {
     private:
+        int currIndex;
         int initialIndex = -1; // uninitialized value
-        int currIndex = -1;
         int firstIndex = -1;
-        RotationDir currUBitDir = CLOCKWISE; // direction of the uBit device, not the ring drawn
+        RotationDir currUBitDir; // direction of the uBit device, not the ring drawn
         bool endRun = false;
 
         /*
@@ -411,6 +489,12 @@ class ParadoxThatDrivesUsAll {
 
 int main() {
     uBit.init();
+    /* We can arbitrarily calibrate the compass since:
+     *   - no significant z-axis error is being introduced
+     *   - we don't care about the actual North, but relative rotation only
+     */
+    // uBit.compass.setCalibration(CompassCalibration());
+    uBit.compass.calibrate();
 
     paradoxThatDrivesUsAll.run();
 
