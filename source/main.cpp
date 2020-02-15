@@ -44,7 +44,6 @@ class TimeForEverything {
                 uBit.display.print(start);
             }
         }
-
     public:
         void run() {
             int x = 5;
@@ -150,10 +149,6 @@ class OrientationManager {
             }
             return orientationReal;
         }
-
-        Orientation getOrientationBuffered() {
-            return getOrientationBuffered([](){});
-        }
 } orientationManager;
 
 class VerticalParadox {
@@ -179,27 +174,30 @@ class HorizontalParadox {
         }
 } horiParadox;
 
-void onOrientationChange() {
-    uBit.display.printChar(' ');
-    vertParadox.reset();
-    horiParadox.reset();
-}
-
-void paradoxThatDrivesUsAll() {
-    while (1) {
-        Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
-        if (currOrient == VERTICAL) {
-            vertParadox.run();
-        } else {
-            horiParadox.run();
+class ParadoxThatDrivesUsAll {
+    private:
+        static void onOrientationChange() {
+            uBit.display.printChar(' ');
+            vertParadox.reset();
+            horiParadox.reset();
         }
-    }
-}
+    public:
+        void run() {
+            while (1) {
+                Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
+                if (currOrient == VERTICAL) {
+                    vertParadox.run();
+                } else {
+                    horiParadox.run();
+                }
+            }
+        }
+} paradoxThatDrivesUsAll;
 
 int main() {
     uBit.init();
 
-    timeForEverything.run();
+    paradoxThatDrivesUsAll.run();
 
     release_fiber();
 }
