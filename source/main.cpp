@@ -191,7 +191,12 @@ class HorizontalParadox {
 
             // If the current heading turns back and passes the previous heading
             if (Math::diffSign(currUBitDir, adjCurrHeading - adjPrevHeading)) {
-                maxHeading = prevHeading;
+                int adjMaxHeading = maxHeading;
+                if (adjMaxHeading < 4 && adjPrevHeading > 13) adjMaxHeading += PERIMETER_LEN;
+                if (adjMaxHeading > 13 && adjPrevHeading < 4) adjPrevHeading += PERIMETER_LEN;
+                if (Math::diffSign(currUBitDir, maxHeading - prevHeading)) {
+                    maxHeading = prevHeading;
+                }
             } else {
                 int adjMaxHeading = maxHeading;
                 if (adjMaxHeading < 4 && adjCurrHeading > 13) adjMaxHeading += PERIMETER_LEN;
