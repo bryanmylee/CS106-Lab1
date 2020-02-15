@@ -273,9 +273,70 @@ class VerticalParadox {
         }
 } vertParadox;
 
+#define TILT_SENS 250
+enum TiltAxis { X_AXIS, Y_AXIS };
 class HorizontalParadox {
+    private:
+        TiltAxis currTiltAxis = X_AXIS;
+        int xIndex = 0;
+        int yIndex = 0;
+
+        void drawTilt() {
+            im.setPixelValue(2 + xIndex, 2 + yIndex, 255);
+        }
+
+        void drawRotation() {
+        }
+
+        void drawComposite() {
+            im.clear();
+            drawRotation();
+            drawTilt();
+        }
+
+        void setTilt() {
+            int xIndexRaw = uBit.accelerometer.getX() / TILT_SENS;
+            int yIndexRaw = uBit.accelerometer.getY() / TILT_SENS;
+
+            if (currTiltAxis == X_AXIS) {
+                if (xIndexRaw != 0) {
+                    xIndex = xIndexRaw;
+                    yIndex = 0;
+                } else if (yIndexRaw != 0) {
+                    xIndex = 0;
+                    yIndex = yIndexRaw;
+                    currTiltAxis = Y_AXIS;
+                } else {
+                    xIndex = 0;
+                    yIndex = 0;
+                }
+            } else {
+                if (yIndexRaw != 0) {
+                    xIndex = 0;
+                    yIndex = yIndexRaw;
+                } else if (xIndexRaw != 0) {
+                    xIndex = xIndexRaw;
+                    yIndex = 0;
+                    currTiltAxis = X_AXIS;
+                } else {
+                    xIndex = 0;
+                    yIndex = 0;
+                }
+            }
+        }
     public:
         void runFrame() {
+            setTilt();
+            drawComposite();
+            uBit.display.print(im);
+
+            // uBit.serial.send("x: ");
+            // uBit.serial.send(uBit.accelerometer.getX());
+            // uBit.serial.send(", y: ");
+            // uBit.serial.send(uBit.accelerometer.getY());
+            // uBit.serial.send(", z: ");
+            // uBit.serial.send(uBit.accelerometer.getZ());
+            // uBit.serial.send("\r\n");
         }
 
         void reset() {
