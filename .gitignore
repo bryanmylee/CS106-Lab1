@@ -1,4 +1,6 @@
 compile-flash.sh
+flash.sh
+compile.sh
 build
 .yotta.json
 yotta_modules
