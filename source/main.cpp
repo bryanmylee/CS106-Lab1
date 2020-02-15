@@ -203,11 +203,13 @@ class VerticalParadox {
             return c;
         }
 
+        // Set a pixel given an index of the ring around the perimeter.
         void setImagePixel(int index) {
             Coord c = getPixelCoord(index);
             im.setPixelValue(c.x, c.y, 255);
         }
 
+        // Draw the image required to print the ring around the perimeter.
         void drawRing(int startDeg, int endDeg, RotationDir dir) {
             im.clear();
 
@@ -216,21 +218,15 @@ class VerticalParadox {
 
             while (i != endIndex) {
                 setImagePixel(i);
-                uBit.serial.send(i);
-                uBit.serial.send(",");
                 i -= dir;
                 i = Math::realMod(i, 18);
             };
-            uBit.serial.send(i);
-            uBit.serial.send(" <--sequence\r\n");
             setImagePixel(i);
         }
     public:
         void runFrame() {
             int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
             if (initialDegrees == -1) initialDegrees = currDegrees;
-            // uBit.serial.send(Math::realMod(currDegrees - initialDegrees, 360));
-            // uBit.serial.send("\r\n");
             drawRing(initialDegrees, currDegrees, CLOCKWISE);
             uBit.display.print(im);
         }
