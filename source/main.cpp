@@ -174,9 +174,15 @@ struct Coord {
 class VerticalParadox {
     private:
         int initialIndex = -1; // uninitialized value
-        int currIndex    = -1;
-        int firstIndex   = -1;
-        RotationDir currDir = CLOCKWISE; // direction of the uBit device, not the ring drawn
+        int currIndex = -1;
+        int firstIndex = -1;
+        RotationDir currUBitDir = CLOCKWISE; // direction of the uBit device, not the ring drawn
+        bool endRun = false;
+
+        void drawCenter() {
+            im.clear();
+            im.setPixelValue(2, 2, 255);
+        }
 
         /*
          * 0 represents the LED closest to buttonA.
@@ -234,19 +240,31 @@ class VerticalParadox {
             currIndex = currDegrees / 20; // 20 degrees per pixel
             if (initialIndex == -1) initialIndex = currIndex;
 
+            /*
+             * Whenever stepping out from the initialIndex, we store 
+             * the firstIndex to keep track of our intended direction.
+             */
             if (firstIndex == -1 && currIndex != initialIndex) {
                 firstIndex = currIndex;
             } else if (currIndex == initialIndex) {
                 firstIndex = -1;
             }
 
-            if (firstIndex > initialIndex || (firstIndex == 0 && initialIndex == 17)) {
-                currDir = COUNTERCLOCKWISE;
+            if (Math::realMod(firstIndex - initialIndex, PERIMETER_LEN) == 1) {
+                currUBitDir = COUNTERCLOCKWISE;
             } else {
-                currDir = CLOCKWISE;
+                currUBitDir = CLOCKWISE;
             }
 
-            drawRing(initialIndex, currIndex, currDir);
+            if (currIndex == Math::realMod(initialIndex + currUBitDir, PERIMETER_LEN)) {
+                endRun = true;
+            }
+
+            if (endRun) {
+                drawCenter();
+            } else {
+                drawRing(initialIndex, currIndex, currUBitDir);
+            }
             uBit.display.print(im);
         }
 
@@ -254,6 +272,7 @@ class VerticalParadox {
             initialIndex = -1;
             currIndex = -1;
             firstIndex = -1;
+            endRun = false;
         }
 } vertParadox;
 
