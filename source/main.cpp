@@ -170,10 +170,13 @@ struct Coord {
     int y;
 };
 
+#define PERIMETER_LEN 18
 class VerticalParadox {
     private:
         int initialIndex = -1; // uninitialized value
-        int prevIndex    = -1;
+        int currIndex    = -1;
+        int firstIndex   = -1;
+        RotationDir currDir = CLOCKWISE; // direction of the uBit device, not the ring drawn
 
         /*
          * 0 represents the LED closest to buttonA.
@@ -210,28 +213,47 @@ class VerticalParadox {
             im.setPixelValue(c.x, c.y, 255);
         }
 
-        // Draw the image required to print the ring around the perimeter.
-        void drawRing(int startIndex, int endIndex, RotationDir dir) {
+        /* 
+         * Draw the image required to print the ring around the perimeter.
+         * @param uBitDir the direction of the uBit device.
+         *                the ring will be drawn in the opposite direction
+         */
+        void drawRing(int startIndex, int endIndex, RotationDir uBitDir) {
             im.clear();
 
             while (startIndex != endIndex) {
                 setImagePixel(startIndex);
-                startIndex -= dir;
-                startIndex = Math::realMod(startIndex, 18);
+                startIndex -= uBitDir;
+                startIndex = Math::realMod(startIndex, PERIMETER_LEN);
             };
             setImagePixel(startIndex);
         }
     public:
         void runFrame() {
             int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-            int currIndex = currDegrees / 20;
+            currIndex = currDegrees / 20; // 20 degrees per pixel
             if (initialIndex == -1) initialIndex = currIndex;
-            drawRing(initialIndex, currIndex, CLOCKWISE);
+
+            if (firstIndex == -1 && currIndex != initialIndex) {
+                firstIndex = currIndex;
+            } else if (currIndex == initialIndex) {
+                firstIndex = -1;
+            }
+
+            if (firstIndex > initialIndex || (firstIndex == 0 && initialIndex == 17)) {
+                currDir = COUNTERCLOCKWISE;
+            } else {
+                currDir = CLOCKWISE;
+            }
+
+            drawRing(initialIndex, currIndex, currDir);
             uBit.display.print(im);
         }
 
         void reset() {
             initialIndex = -1;
+            currIndex = -1;
+            firstIndex = -1;
         }
 } vertParadox;
 
@@ -254,12 +276,14 @@ class ParadoxThatDrivesUsAll {
     public:
         void run() {
             while (1) {
+                uBit.serial.send("running:");
                 Orientation currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
                     vertParadox.runFrame();
                 } else {
                     horiParadox.runFrame();
                 }
+                uBit.serial.send("\r\n");
             }
         }
 } paradoxThatDrivesUsAll;
@@ -268,7 +292,6 @@ int main() {
     uBit.init();
 
     paradoxThatDrivesUsAll.run();
-    uBit.serial.send("running\r\n");
 
     release_fiber();
 }
