@@ -111,6 +111,13 @@ class Math {
             const int result = x % radix;
             return result >= 0 ? result : result + radix;
         }
+        static int squaredMagnitude(int x, int y) {
+            return x * x + y * y;
+        }
+
+        static int squaredMagnitude(int x, int y, int z) {
+            return x * x + y * y + z * z;
+        }
     private:
         Math() {}
 };
@@ -427,12 +434,16 @@ class VerticalParadox {
 
 /* 
  * The margin of error for what we define as horizontal.
- *   |z| > HORIZONTAL_MARGIN: horizontal
- *   |z| < HORIZONTAL_MARGIN: vertical
+ *   |z| > ORIENTATION_MARGIN: horizontal
+ *   |z| < ORIENTATION_MARGIN: vertical
+ *   |x, y| > ORIENTATION_MARGIN: vertical
+ *   |x, y| < ORIENTATION_MARGIN: horizontal
  */
-#define HORIZONTAL_MARGIN 700
+#define ORIENTATION_MARGIN 700
+// We ignore accelerometer readings with a magnitude greater than GRAVITY
+#define GRAVITY 1250
 // Defines how many consecutive clean data points are captured before we register a change in verticality
-#define ORIENTATION_SENS 20
+#define ORIENTATION_SENS 100
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 class OrientationManager {
     private:
@@ -440,25 +451,47 @@ class OrientationManager {
         int changedCount = 0;
 
         /* 
-         * We can check for orientation by checking the magnitude of the vector <z>
+         * When VERTICAL, we check for horizontality by checking the magnitude of the vector <z>
          *      0: perfectly vertical
          *   1023: perfectly horizontal
-         * There are some flaws with this approach:
-         *   * Moving the uBit along its normal will result in this feature to fail
+         * When HORIZONTAL, we check for verticality by checking the magnitude of the vector <x, y>
+         *      0: perfectly horizontal
+         *   1023: perfectly vertical
+         * This is so we can avoid issues with movement.
          */
         Orientation getOrientationRaw() {
-            if (Math::abs(uBit.accelerometer.getZ()) > HORIZONTAL_MARGIN) {
+            if (orientationReal == VERTICAL) {
+                if (Math::abs(uBit.accelerometer.getZ()) > ORIENTATION_MARGIN) {
+                    return HORIZONTAL;
+                }
+                return VERTICAL;
+            } else {
+                if (Math::squaredMagnitude(
+                            uBit.accelerometer.getX(),
+                            uBit.accelerometer.getY()) > ORIENTATION_MARGIN * ORIENTATION_MARGIN) {
+                    return VERTICAL;
+                }
                 return HORIZONTAL;
             }
-            return VERTICAL;
         }
     public:
         /*
-         * Wait until we get VERT_SENS data points before registering a change in orientation
+         * Wait until we get ORIENTATION_SENS data points before registering a change in orientation
          *
          * @param (*onChange)() callback function when orientation changes
          */
         Orientation getOrientationBuffered(void (*onChange)()) {
+            /*
+             * There are some flaws with using |z| or |x, y| to determine orientation. 
+             * Moving the uBit along its z-axis will result in increased |z|, even when vertical.
+             * To mitigate this, we can ignore all readings where |x, y, z| > GRAVITY
+             */
+            if (Math::squaredMagnitude(
+                        uBit.accelerometer.getX(),
+                        uBit.accelerometer.getY(),
+                        uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
+                return orientationReal;
+            }
             if (getOrientationRaw() ^ orientationReal) {
                 changedCount++;
             } else {
