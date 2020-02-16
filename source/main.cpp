@@ -182,8 +182,10 @@ class HorizontalParadox {
         void checkTurns() {
             if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == initialHeading) {
                 nTurns++;
-                // Assumption being made since values larger than 9 will 
-                // cause the display to sequentially display each digit.
+                /* 
+                 * Assumption being made since values larger than 9 will 
+                 * cause the display to sequentially display each digit.
+                 */
                 if (nTurns > 9) nTurns = 9;
                 resetRotation();
             }
@@ -321,24 +323,24 @@ class VerticalParadox {
         Coord getPixelCoord(int index) {
             Coord c;
             switch (index) {
-                case 0: c.x = 0; c.y = 2; break;
-                case 1: c.x = 0; c.y = 1; break;
-                case 2: c.x = 0; c.y = 0; break;
-                case 3: c.x = 1; c.y = 0; break;
-                case 4: c.x = 2; c.y = 0; break;
-                case 5: c.x = 3; c.y = 0; break;
-                case 6: c.x = 4; c.y = 0; break;
-                case 7: c.x = 4; c.y = 1; break;
-                case 8: c.x = 4; c.y = 2; break;
-                case 9: c.x = 4; c.y = 3; break;
-                case 10: c.x = 4; c.y = 4; break;
-                case 11: c.x = 3; c.y = 4; break;
-                case 12: c.x = 2; c.y = 4; break;
-                case 13: c.x = 1; c.y = 4; break;
-                case 14: c.x = 0; c.y = 4; break;
-                case 15: c.x = 0; c.y = 3; break;
-                case 16: c.x = 0; c.y = 2; break;
-                case 17: c.x = 0; c.y = 1; break;
+                case 0  : c.x = 0; c.y = 2; break;
+                case 1  : c.x = 0; c.y = 1; break;
+                case 2  : c.x = 0; c.y = 0; break;
+                case 3  : c.x = 1; c.y = 0; break;
+                case 4  : c.x = 2; c.y = 0; break;
+                case 5  : c.x = 3; c.y = 0; break;
+                case 6  : c.x = 4; c.y = 0; break;
+                case 7  : c.x = 4; c.y = 1; break;
+                case 8  : c.x = 4; c.y = 2; break;
+                case 9  : c.x = 4; c.y = 3; break;
+                case 10 : c.x = 4; c.y = 4; break;
+                case 11 : c.x = 3; c.y = 4; break;
+                case 12 : c.x = 2; c.y = 4; break;
+                case 13 : c.x = 1; c.y = 4; break;
+                case 14 : c.x = 0; c.y = 4; break;
+                case 15 : c.x = 0; c.y = 3; break;
+                case 16 : c.x = 0; c.y = 2; break;
+                case 17 : c.x = 0; c.y = 1; break;
             }
             return c;
         }
