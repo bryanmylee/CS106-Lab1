@@ -129,9 +129,9 @@ class Circular {
          *
          * @param radix the size of the circular structure
          */
-        enum Direction { CLOCKWISE, COUNTERCLOCKWISE, SAME, OPPOSITE };
+        enum Direction { CLOCKWISE = 1, COUNTERCLOCKWISE = -1, NO_ROTATION = 0, OPPOSITE = 2};
         static Direction compare(int a, int b, int radix) {
-            if (b == a) return SAME;
+            if (b == a) return NO_ROTATION;
             if (Math::realMod(b - a, radix) == radix / 2) return OPPOSITE;
             if (Math::realMod(b - a, radix) < radix / 2) return CLOCKWISE;
             return COUNTERCLOCKWISE;
@@ -153,12 +153,11 @@ struct Coord {
     }
 };
 
-#define TILT_SENS 250 // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
+#define TILT_SENS 250        // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
 #define CHANGE_TILT_SENS 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
 #define CHANGE_HEADING_SENS 20
-enum RotationDir { COUNTERCLOCKWISE = -1, NO_ROTATION = 0, CLOCKWISE = 1 };
 class HorizontalParadox {
     private:
         Coord pos = {0, 0};
@@ -168,7 +167,7 @@ class HorizontalParadox {
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
-        RotationDir currUBitDir = NO_ROTATION;
+        Circular::Direction currUBitDir = Circular::NO_ROTATION;
         int turnCount = 0;
 
         void drawTilt() {
@@ -198,67 +197,39 @@ class HorizontalParadox {
         void setCurrUBitDir() {
             Circular::Direction prevToInit = Circular::compare(prevHeading, initialHeading, PERIMETER_LEN);
             Circular::Direction initToCurr = Circular::compare(initialHeading, currHeading, PERIMETER_LEN);
-            if ((prevToInit == Circular::CLOCKWISE || prevToInit == Circular::SAME)
+            if ((prevToInit == Circular::CLOCKWISE || prevToInit == Circular::NO_ROTATION)
                     && initToCurr == Circular::CLOCKWISE) {
-                if (currUBitDir != CLOCKWISE) {
-                    currUBitDir = CLOCKWISE;
-                }
-            } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::SAME)
+                // Left or passed through initialHeading in the clockwise direction
+                currUBitDir = Circular::CLOCKWISE;
+            } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::NO_ROTATION)
                     && initToCurr == Circular::COUNTERCLOCKWISE) {
-                if (currUBitDir != COUNTERCLOCKWISE) {
-                    currUBitDir = COUNTERCLOCKWISE;
-                }
+                // Left or passed through initialHeading in the counter-clockwise direction
+                currUBitDir = Circular::COUNTERCLOCKWISE;
             }
         }
 
         void checkTurns() {
-            if (currUBitDir == NO_ROTATION) return;
+            if (currUBitDir == Circular::NO_ROTATION) return;
 
             Circular::Direction prevToInit = Circular::compare(prevHeading, initialHeading, PERIMETER_LEN);
             Circular::Direction initToCurr = Circular::compare(initialHeading, currHeading, PERIMETER_LEN);
             if (prevToInit == Circular::CLOCKWISE
-                    && (initToCurr == Circular::CLOCKWISE || initToCurr == Circular::SAME)
-                    && currUBitDir == CLOCKWISE) {
+                    && (initToCurr == Circular::CLOCKWISE || initToCurr == Circular::NO_ROTATION)
+                    && currUBitDir == Circular::CLOCKWISE) {
                 // Touched initialHeading from the clockwise direction
                 turnCount++;
                 if (turnCount > 9) turnCount = 9;
-                uBit.serial.send("Touched clockwise\r\n");
-                {
-                    uBit.serial.send("curr:");
-                    uBit.serial.send(currHeading);
-                    uBit.serial.send(", prev:");
-                    uBit.serial.send(prevHeading);
-                    uBit.serial.send(", init:");
-                    uBit.serial.send(initialHeading);
-                    uBit.serial.send(", cdir:");
-                    uBit.serial.send(currUBitDir);
-                    uBit.serial.send(" | resetDirection\r\n");
-                }
             } else if (prevToInit == Circular::COUNTERCLOCKWISE
-                    && (initToCurr == Circular::COUNTERCLOCKWISE || initToCurr == Circular::SAME)
-                    && currUBitDir == COUNTERCLOCKWISE) {
+                    && (initToCurr == Circular::COUNTERCLOCKWISE || initToCurr == Circular::NO_ROTATION)
+                    && currUBitDir == Circular::COUNTERCLOCKWISE) {
                 // Touched initialHeading from the counter-clockwise direction
                 turnCount--;
                 if (turnCount < 0) turnCount = 0;
-                uBit.serial.send("Touched counter-clockwise\r\n");
-                {
-                    uBit.serial.send("curr:");
-                    uBit.serial.send(currHeading);
-                    uBit.serial.send(", prev:");
-                    uBit.serial.send(prevHeading);
-                    uBit.serial.send(", init:");
-                    uBit.serial.send(initialHeading);
-                    uBit.serial.send(", cdir:");
-                    uBit.serial.send(currUBitDir);
-                    uBit.serial.send(" | resetDirection\r\n");
-                }
             }
         }
 
         void setInitialHeading() {
             if (initialHeading == -1) initialHeading = currHeading;
-            // uBit.serial.send(initialHeading);
-            // uBit.serial.send(",");
         }
 
         void setCurrentHeading() {
@@ -324,7 +295,7 @@ class HorizontalParadox {
             lastBlink = uBit.systemTime();
             currHeading = -1;
             initialHeading = -1;
-            currUBitDir = NO_ROTATION;
+            currUBitDir = Circular::NO_ROTATION;
             turnCount = 0;
         }
 } horiParadox;
@@ -334,7 +305,7 @@ class VerticalParadox {
         int currIndex;
         int initialIndex = -1; // uninitialized value
         int firstIndex = -1;
-        RotationDir currUBitDir; // direction of the uBit device, not the ring drawn
+        Circular::Direction currUBitDir; // direction of the uBit device, not the ring drawn
         bool endRun = false;
 
         /*
@@ -395,9 +366,9 @@ class VerticalParadox {
 
         void setCurrUBitDir() {
             if (Math::realMod(firstIndex - initialIndex, PERIMETER_LEN) == 1) {
-                currUBitDir = COUNTERCLOCKWISE;
+                currUBitDir = Circular::COUNTERCLOCKWISE;
             } else {
-                currUBitDir = CLOCKWISE;
+                currUBitDir = Circular::CLOCKWISE;
             }
         }
 
