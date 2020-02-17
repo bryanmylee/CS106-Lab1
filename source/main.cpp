@@ -118,6 +118,20 @@ class Math {
         static int squaredMagnitude(int x, int y, int z) {
             return x * x + y * y + z * z;
         }
+
+        /*
+         * Given a circular structure with a given radix, determine the order of a and b
+         *
+         * @param radix the size of the circular structure
+         * @return 
+         *    1: b is clockwise of a
+         *   -1: b is counter clockwise of a
+         */
+        static int circularCompare(int a, int b, int radix) {
+            if (b == a) return 0;
+            if (realMod(b - a, radix) < radix / 2) return 1;
+            return -1;
+        }
     private:
         Math() {}
 };
@@ -143,27 +157,26 @@ struct Coord {
 #define CHANGE_TILT_SENS 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
-#define CHANGE_DIR_SENS 3
-enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
+#define CHANGE_HEADING_SENS 20
+enum RotationDir { COUNTERCLOCKWISE = -1, NO_ROTATION = 0, CLOCKWISE = 1 };
 class HorizontalParadox {
     private:
         Coord pos = {0, 0};
         int posChangedCount = 0;
         unsigned long lastBlink = uBit.systemTime();
 
-        int turnCount = 0;
+        int headingChangedCount = 0;
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
         int firstHeading = -1;
         RotationDir currUBitDir;
-        int turnBackCount = 0;
+        int turnCount = 0;
 
-        void resetRotation() {
+        void resetHeading() {
             currHeading = -1;
             initialHeading = -1;
             firstHeading = -1;
-            turnBackCount = 0;
         }
 
         void drawTilt() {
@@ -190,57 +203,72 @@ class HorizontalParadox {
             drawTilt();
         }
 
-        void checkTurns() {
-            if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == initialHeading) {
-                turnCount++;
-                /* 
-                 * Assumption being made since values larger than 9 will 
-                 * cause the display to sequentially display each digit.
-                 */
-                if (turnCount > 9) turnCount = 9;
-                resetRotation();
-            }
-        }
-
-        /*
-         * Account for noise in data by validating resets.
-         * If the number of turnbacks > CHANGE_DIR_SENS, then we register a reset
-         */
-        void checkDirResetBuffered() {
-            if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == prevHeading) {
-                turnBackCount++;
-            } else if (Math::realMod(prevHeading + currUBitDir, PERIMETER_LEN) == currHeading) {
-                turnBackCount--;
-            }
-            if (turnBackCount < 0) turnBackCount = 0;
-            if (turnBackCount > CHANGE_DIR_SENS) {
-                turnCount = 0;
-                turnBackCount = 0;
-            }
-        }
+        // void checkTurns() {
+        //     if (currHeading == initialHeading) {
+        //         turnCount++;
+        //         uBit.serial.send(turnCount);
+        //         uBit.serial.send("click!\r\n");
+        //     }
+        // }
 
         void setCurrUBitDir() {
-            if (Math::realMod(firstHeading - initialHeading, PERIMETER_LEN) == 1) {
-                currUBitDir = CLOCKWISE;
-            } else {
-                currUBitDir = COUNTERCLOCKWISE;
+            if (Math::circularCompare(prevHeading, initialHeading, PERIMETER_LEN) >= 0 
+                    && Math::circularCompare(initialHeading, currHeading, PERIMETER_LEN) > 0) {
+                if (currUBitDir != CLOCKWISE) {
+                    currUBitDir = CLOCKWISE;
+                    uBit.serial.send("CHANGED TO CLOCKWISE");
+                }
+            } else if (Math::circularCompare(prevHeading, initialHeading, PERIMETER_LEN) <= 0
+                    && Math::circularCompare(initialHeading, currHeading, PERIMETER_LEN) < 0) {
+                if (currUBitDir != COUNTERCLOCKWISE) {
+                    currUBitDir = COUNTERCLOCKWISE;
+                    uBit.serial.send("CHANGED TO COUNTERCLOCKWISE");
+                }
+            }
+            {
+                uBit.serial.send("curr:");
+                uBit.serial.send(currHeading);
+                uBit.serial.send(", prev:");
+                uBit.serial.send(prevHeading);
+                uBit.serial.send(", init:");
+                uBit.serial.send(initialHeading);
+                uBit.serial.send(", cdir:");
+                uBit.serial.send(currUBitDir);
+                uBit.serial.send(" | resetDirection\r\n");
             }
         }
 
-        void setFirstHeading() {
-            if (firstHeading == -1 && currHeading != initialHeading) {
-                firstHeading = currHeading;
-            } else if (currHeading == initialHeading) {
-                firstHeading = -1;
+        void resetDirection() {
+            if (Math::realMod(prevHeading + currUBitDir, PERIMETER_LEN) == initialHeading) {
+                turnCount += currUBitDir;
+                uBit.serial.send(turnCount);
+                uBit.serial.send("click!\r\n");
             }
+            firstHeading = -1;
         }
 
         void setInitialHeading() {
             if (initialHeading == -1) initialHeading = currHeading;
+            // uBit.serial.send(initialHeading);
+            // uBit.serial.send(",");
         }
 
         void setCurrentHeading() {
             currHeading = uBit.compass.heading() / 20;
+            // if (currHeading == -1) {
+            //     currHeading = currHeadingRaw;
+            //     return;
+            // }
+            // if (currHeadingRaw != currHeading) {
+            //     headingChangedCount++;
+            // } else {
+            //     headingChangedCount = 0;
+            // }
+            // if (headingChangedCount > CHANGE_HEADING_SENS) {
+            //     currHeading = currHeadingRaw;
+            // }
+            // uBit.serial.send(currHeading);
+            // uBit.serial.send(",");
         }
 
         void setPrevHeading() {
@@ -255,7 +283,6 @@ class HorizontalParadox {
             setPrevHeading();
             setCurrentHeading();
             setInitialHeading();
-            setFirstHeading();
         }
 
         void setTilt() {
@@ -292,8 +319,8 @@ class HorizontalParadox {
             setTilt();
             setHeadings();
             setCurrUBitDir();
-            checkDirResetBuffered();
-            checkTurns();
+            // uBit.serial.send("\r\n");
+            // checkTurns();
             drawComposite();
             uBit.display.print(im);
         }
@@ -303,7 +330,7 @@ class HorizontalParadox {
             posChangedCount = 0;
             lastBlink = uBit.systemTime();
             turnCount = 0;
-            resetRotation();
+            resetHeading();
         }
 } horiParadox;
 
@@ -510,6 +537,7 @@ class ParadoxThatDrivesUsAll {
     public:
         void run() {
             uBit.compass.calibrate();
+            // uBit.compass.setCalibration(CompassCalibration());
             while (1) {
                 currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
