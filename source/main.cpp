@@ -153,19 +153,24 @@ struct Coord {
     }
 };
 
-template <typename T>
+template <class S, typename T>
 class Buffer {
     private:
         int changedCount = 0;
         int bufferSize;
         T currentValue;
+        S *s;
+        T (S::*getRaw)();
     public:
-        Buffer(int bufferSize, T raw) {
+        Buffer(int bufferSize, T (S::*getRaw)(), S *s) {
             this->bufferSize = bufferSize;
-            this->currentValue = raw;
+            this->currentValue = (*s.*getRaw)();
+            this->s = s;
+            this->getRaw = getRaw;
         }
 
-        T value(T raw, void (*onChange)()) {
+        T value(void (*onChange)()) {
+            T raw = (*s.*getRaw)();
             if (raw != currentValue) {
                 changedCount++;
             } else {
@@ -179,8 +184,8 @@ class Buffer {
             return currentValue;
         }
 
-        T value(T raw) {
-            return value(raw, [](){});
+        T value() {
+            return value([](){});
         }
 };
 
@@ -198,14 +203,16 @@ class HorizontalParadox {
             };
             return pos;
         }
-        Buffer<Coord> *posBuffer = new Buffer<Coord>(TILT_BUFFER, getRawPos());
+        Buffer<HorizontalParadox, Coord> *posBuffer
+            = new Buffer<HorizontalParadox, Coord>(TILT_BUFFER, &HorizontalParadox::getRawPos, this);
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
 
         int getRawHeading() {
             return uBit.compass.heading() / 20;
         }
-        Buffer<int> *headingBuffer = new Buffer<int>(HEADING_BUFFER, getRawHeading());
+        Buffer<HorizontalParadox, int> *headingBuffer
+            = new Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
@@ -276,12 +283,12 @@ class HorizontalParadox {
         }
 
         void setCurrentHeading() {
-            currHeading = headingBuffer->value(getRawHeading());
+            currHeading = headingBuffer->value();
         }
 
         void setPreviousHeading() {
             if (currHeading == -1) {
-                prevHeading = headingBuffer->value(getRawHeading());
+                prevHeading = headingBuffer->value();
             } else {
                 prevHeading = currHeading;
             }
@@ -294,7 +301,7 @@ class HorizontalParadox {
         }
 
         void updateTilt() {
-            pos = posBuffer->value(getRawPos());
+            pos = posBuffer->value();
 
             if (pos.x > 2) pos.x = 2;
             if (pos.x < -2) pos.x = -2;
@@ -472,6 +479,8 @@ class OrientationManager {
                 return VERTICAL;
             }
         }
+        Buffer<OrientationManager, Orientation> *orientationBuffer
+            = new Buffer<OrientationManager, Orientation>(ORIENTATION_BUFFER, &OrientationManager::getOrientationRaw, this);
     public:
         /*
          * Wait until we get ORIENTATION_BUFFER data points before registering a change in orientation
@@ -490,17 +499,7 @@ class OrientationManager {
                         uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
                 return currOrientation;
             }
-            if (getOrientationRaw() != currOrientation) {
-                changedCount++;
-            } else {
-                changedCount = 0;
-                return currOrientation;
-            }
-            if (changedCount > ORIENTATION_BUFFER) {
-                currOrientation = (Orientation) !currOrientation;
-                (*onChange)();
-            }
-            return currOrientation;
+            return orientationBuffer->value(onChange);
         }
 } orientationManager;
 
