@@ -153,17 +153,59 @@ struct Coord {
     }
 };
 
-#define TILT_SENS 250        // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
-#define CHANGE_TILT_SENS 100 // How many data points before registering a change in tilt
-#define BLINK_DUR 250
+template <typename T>
+class Buffer {
+    private:
+        int changedCount = 0;
+        int bufferSize;
+        T currentValue;
+    public:
+        Buffer(int bufferSize, T raw) {
+            this->bufferSize = bufferSize;
+            this->currentValue = raw;
+        }
+
+        T value(T raw, void (*onChange)()) {
+            if (raw != currentValue) {
+                changedCount++;
+            } else {
+                changedCount = 0;
+                return currentValue;
+            }
+            if (changedCount > bufferSize) {
+                currentValue = raw;
+                (*onChange)();
+            }
+            return currentValue;
+        }
+
+        T value(T raw) {
+            return value(raw, [](){});
+        }
+};
+
 #define PERIMETER_LEN 18
-#define CHANGE_HEADING_SENS 20
+#define TILT_SENS 250        // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
+#define TILT_BUFFER 100 // How many data points before registering a change in tilt
+#define BLINK_DUR 250
+#define HEADING_BUFFER 100
 class HorizontalParadox {
     private:
+        Coord getRawPos() {
+            Coord pos = {
+                uBit.accelerometer.getX() / TILT_SENS,
+                uBit.accelerometer.getY() / TILT_SENS
+            };
+            return pos;
+        }
+        Buffer<Coord> *posBuffer = new Buffer<Coord>(TILT_BUFFER, getRawPos());
         Coord pos = {0, 0};
-        int posChangedCount = 0;
         unsigned long lastBlink = uBit.systemTime();
 
+        int getRawHeading() {
+            return uBit.compass.heading() / 20;
+        }
+        Buffer<int> *headingBuffer = new Buffer<int>(HEADING_BUFFER, getRawHeading());
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
@@ -234,12 +276,12 @@ class HorizontalParadox {
         }
 
         void setCurrentHeading() {
-            currHeading = uBit.compass.heading() / 20;
+            currHeading = headingBuffer->value(getRawHeading());
         }
 
         void setPreviousHeading() {
             if (currHeading == -1) {
-                prevHeading = uBit.compass.heading() / 20;
+                prevHeading = headingBuffer->value(getRawHeading());
             } else {
                 prevHeading = currHeading;
             }
@@ -252,24 +294,7 @@ class HorizontalParadox {
         }
 
         void updateTilt() {
-            Coord posRaw = {
-                uBit.accelerometer.getX() / TILT_SENS,
-                uBit.accelerometer.getY() / TILT_SENS
-            };
-
-            /*
-             * To reduce flickering between two positions, we wait till the new position 
-             * has been sampled CHANGE_TILT_SENS times before changing the position.
-             */
-            if (posRaw != pos) {
-                posChangedCount++;
-            } else {
-                posChangedCount = 0;
-            }
-            
-            if (posChangedCount > CHANGE_TILT_SENS) {
-                pos = posRaw;
-            }
+            pos = posBuffer->value(getRawPos());
 
             if (pos.x > 2) pos.x = 2;
             if (pos.x < -2) pos.x = -2;
@@ -291,7 +316,6 @@ class HorizontalParadox {
 
         void reset() {
             pos = {0, 0};
-            posChangedCount = 0;
             lastBlink = uBit.systemTime();
             currHeading = -1;
             initialHeading = -1;
@@ -300,6 +324,7 @@ class HorizontalParadox {
         }
 } horiParadox;
 
+#define INDEX_BUFFER 100
 class VerticalParadox {
     private:
         int prevIndex;
@@ -416,12 +441,12 @@ class VerticalParadox {
  */
 #define HORI_TO_VERT_MARGIN 950
 #define VERT_TO_HORI_MARGIN 950
-#define GRAVITY 1250          // We ignore accelerometer readings with a magnitude greater than GRAVITY
-#define CHANGE_ORIENT_SENS 10 // Defines how many consecutive clean data points are captured before we register a change in verticality
+#define GRAVITY 1250           // We ignore accelerometer readings with a magnitude greater than GRAVITY
+#define ORIENTATION_BUFFER 100 // Defines how many consecutive clean data points are captured before we register a change in verticality
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 class OrientationManager {
     private:
-        Orientation orientationReal = HORIZONTAL;
+        Orientation currOrientation = HORIZONTAL;
         int changedCount = 0;
 
         /* 
@@ -434,7 +459,7 @@ class OrientationManager {
          * This is so we can avoid issues with moving the uBit.
          */
         Orientation getOrientationRaw() {
-            if (orientationReal == HORIZONTAL) {
+            if (currOrientation == HORIZONTAL) {
                 if (Math::squaredMagnitude(
                             uBit.accelerometer.getX(),
                             uBit.accelerometer.getY()) > HORI_TO_VERT_MARGIN * HORI_TO_VERT_MARGIN) {
@@ -450,7 +475,7 @@ class OrientationManager {
         }
     public:
         /*
-         * Wait until we get CHANGE_ORIENT_SENS data points before registering a change in orientation
+         * Wait until we get ORIENTATION_BUFFER data points before registering a change in orientation
          *
          * @param (*onChange)() callback function when orientation changes
          */
@@ -464,19 +489,19 @@ class OrientationManager {
                         uBit.accelerometer.getX(),
                         uBit.accelerometer.getY(),
                         uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
-                return orientationReal;
+                return currOrientation;
             }
-            if (getOrientationRaw() ^ orientationReal) {
+            if (getOrientationRaw() != currOrientation) {
                 changedCount++;
             } else {
                 changedCount = 0;
-                return orientationReal;
+                return currOrientation;
             }
-            if (changedCount > CHANGE_ORIENT_SENS) {
-                orientationReal = (Orientation) !orientationReal;
+            if (changedCount > ORIENTATION_BUFFER) {
+                currOrientation = (Orientation) !currOrientation;
                 (*onChange)();
             }
-            return orientationReal;
+            return currOrientation;
         }
 } orientationManager;
 
@@ -490,7 +515,7 @@ class ParadoxThatDrivesUsAll {
         }
     public:
         void run() {
-            uBit.compass.calibrate();
+            // uBit.compass.calibrate();
             while (1) {
                 currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
                 if (currOrient == VERTICAL) {
