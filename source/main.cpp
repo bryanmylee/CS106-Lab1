@@ -1,7 +1,7 @@
 #include "MicroBit.h"
 
 MicroBit uBit;
-/* 
+/*
  * Initialization of MicroBitImage seems to be a little broken,
  * so we will settle with reusing one image instead.
  */
@@ -143,7 +143,7 @@ class Circular {
 struct Coord {
     int x;
     int y;
-    
+
     bool operator==(Coord const& other) {
         return x == other.x && y == other.y;
     }
@@ -432,7 +432,7 @@ class VerticalParadox {
         }
 } vertParadox;
 
-/* 
+/*
  * The margin of error for what we define as horizontal.
  *   |x, y| < HORI_TO_VERT_MARGIN: horizontal
  *   |x, y| > HORI_TO_VERT_MARGIN: vertical
@@ -447,9 +447,8 @@ enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 class OrientationManager {
     private:
         Orientation currOrientation = HORIZONTAL;
-        int changedCount = 0;
 
-        /* 
+        /*
          * When VERTICAL, we check for horizontality by checking the magnitude of the vector <z>
          *      0: perfectly vertical
          *   1023: perfectly horizontal
@@ -481,7 +480,7 @@ class OrientationManager {
          */
         Orientation getOrientationBuffered(void (*onChange)()) {
             /*
-             * There are some flaws with using |z| or |x, y| to determine orientation. 
+             * There are some flaws with using |z| or |x, y| to determine orientation.
              * Moving the uBit along its z-axis will result in increased |z|, even when vertical.
              * To mitigate this, we can ignore all readings where |x, y, z| > GRAVITY
              */
