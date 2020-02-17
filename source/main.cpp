@@ -125,6 +125,14 @@ class Math {
 struct Coord {
     int x;
     int y;
+    
+    bool operator==(Coord const& other) {
+        return x == other.x && y == other.y;
+    }
+
+    bool operator!=(Coord const& other) {
+        return x != other.x || y != other.y;
+    }
 };
 
 /*
@@ -132,34 +140,30 @@ struct Coord {
  * Lower values result in more sensitive movement
  */
 #define TILT_SENS 250
+#define CHANGE_TILT_SENS 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
 #define CHANGE_DIR_SENS 3
-/*
- * Constraints movement to either the X_AXIS or Y_AXIS.
- * Movement between the two axis can only occur at (0, 0)
- */
-enum TiltAxis { X_AXIS, Y_AXIS };
 enum RotationDir { COUNTERCLOCKWISE = -1, CLOCKWISE = 1 };
 class HorizontalParadox {
     private:
-        TiltAxis currTiltAxis = X_AXIS;
         Coord pos = {0, 0};
+        int posChangedCount = 0;
         unsigned long lastBlink = uBit.systemTime();
 
-        int nTurns = 0;
+        int turnCount = 0;
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
         int firstHeading = -1;
         RotationDir currUBitDir;
-        int nTurnBacks = 0;
+        int turnBackCount = 0;
 
         void resetRotation() {
             currHeading = -1;
             initialHeading = -1;
             firstHeading = -1;
-            nTurnBacks = 0;
+            turnBackCount = 0;
         }
 
         void drawTilt() {
@@ -177,7 +181,7 @@ class HorizontalParadox {
         }
 
         void drawRotation() {
-            im.print('0' + nTurns);
+            im.print('0' + turnCount);
         }
 
         void drawComposite() {
@@ -188,12 +192,12 @@ class HorizontalParadox {
 
         void checkTurns() {
             if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == initialHeading) {
-                nTurns++;
+                turnCount++;
                 /* 
                  * Assumption being made since values larger than 9 will 
                  * cause the display to sequentially display each digit.
                  */
-                if (nTurns > 9) nTurns = 9;
+                if (turnCount > 9) turnCount = 9;
                 resetRotation();
             }
         }
@@ -204,14 +208,14 @@ class HorizontalParadox {
          */
         void checkDirResetBuffered() {
             if (Math::realMod(currHeading + currUBitDir, PERIMETER_LEN) == prevHeading) {
-                nTurnBacks++;
+                turnBackCount++;
             } else if (Math::realMod(prevHeading + currUBitDir, PERIMETER_LEN) == currHeading) {
-                nTurnBacks--;
+                turnBackCount--;
             }
-            if (nTurnBacks < 0) nTurnBacks = 0;
-            if (nTurnBacks > CHANGE_DIR_SENS) {
-                nTurns = 0;
-                nTurnBacks = 0;
+            if (turnBackCount < 0) turnBackCount = 0;
+            if (turnBackCount > CHANGE_DIR_SENS) {
+                turnCount = 0;
+                turnBackCount = 0;
             }
         }
 
@@ -260,30 +264,18 @@ class HorizontalParadox {
                 uBit.accelerometer.getY() / TILT_SENS
             };
 
-            if (currTiltAxis == X_AXIS) {
-                if (posRaw.x != 0) {
-                    pos.x = posRaw.x;
-                    pos.y = 0;
-                } else if (posRaw.y != 0) {
-                    pos.x = 0;
-                    pos.y = posRaw.y;
-                    currTiltAxis = Y_AXIS;
-                } else {
-                    pos.x = 0;
-                    pos.y = 0;
-                }
+            /*
+             * To reduce flickering between two positions, we wait till the new position 
+             * has been sampled CHANGE_TILT_SENS times before changing the position.
+             */
+            if (posRaw != pos) {
+                posChangedCount++;
             } else {
-                if (posRaw.y != 0) {
-                    pos.x = 0;
-                    pos.y = posRaw.y;
-                } else if (posRaw.x != 0) {
-                    pos.x = posRaw.x;
-                    pos.y = 0;
-                    currTiltAxis = X_AXIS;
-                } else {
-                    pos.x = 0;
-                    pos.y = 0;
-                }
+                posChangedCount = 0;
+            }
+            
+            if (posChangedCount > CHANGE_TILT_SENS) {
+                pos = posRaw;
             }
 
             if (pos.x > 2) pos.x = 2;
@@ -292,7 +284,7 @@ class HorizontalParadox {
             if (pos.y < -2) pos.y = -2;
 
             if (Math::abs(pos.x) == 2 || Math::abs(pos.y) == 2) {
-                nTurns = 0;
+                turnCount = 0;
             }
         }
     public:
@@ -307,10 +299,10 @@ class HorizontalParadox {
         }
 
         void reset() {
-            pos.x = 0;
-            pos.y = 0;
+            pos = {0, 0};
+            posChangedCount = 0;
             lastBlink = uBit.systemTime();
-            nTurns = 0;
+            turnCount = 0;
             resetRotation();
         }
 } horiParadox;
@@ -434,12 +426,13 @@ class VerticalParadox {
 
 /* 
  * The margin of error for what we define as horizontal.
- *   |z| > ORIENTATION_MARGIN: horizontal
- *   |z| < ORIENTATION_MARGIN: vertical
- *   |x, y| > ORIENTATION_MARGIN: vertical
- *   |x, y| < ORIENTATION_MARGIN: horizontal
+ *   |x, y| < HORI_TO_VERT_MARGIN: horizontal
+ *   |x, y| > HORI_TO_VERT_MARGIN: vertical
+ *   |z| < VERT_TO_HORI_MARGIN: vertical
+ *   |z| > VERT_TO_HORI_MARGIN: horizontal
  */
-#define ORIENTATION_MARGIN 700
+#define HORI_TO_VERT_MARGIN 900
+#define VERT_TO_HORI_MARGIN 800
 // We ignore accelerometer readings with a magnitude greater than GRAVITY
 #define GRAVITY 1250
 // Defines how many consecutive clean data points are captured before we register a change in verticality
@@ -457,21 +450,21 @@ class OrientationManager {
          * When HORIZONTAL, we check for verticality by checking the magnitude of the vector <x, y>
          *      0: perfectly horizontal
          *   1023: perfectly vertical
-         * This is so we can avoid issues with movement.
+         * This is so we can avoid issues with moving the uBit.
          */
         Orientation getOrientationRaw() {
-            if (orientationReal == VERTICAL) {
-                if (Math::abs(uBit.accelerometer.getZ()) > ORIENTATION_MARGIN) {
-                    return HORIZONTAL;
-                }
-                return VERTICAL;
-            } else {
+            if (orientationReal == HORIZONTAL) {
                 if (Math::squaredMagnitude(
                             uBit.accelerometer.getX(),
-                            uBit.accelerometer.getY()) > ORIENTATION_MARGIN * ORIENTATION_MARGIN) {
+                            uBit.accelerometer.getY()) > HORI_TO_VERT_MARGIN * HORI_TO_VERT_MARGIN) {
                     return VERTICAL;
                 }
                 return HORIZONTAL;
+            } else {
+                if (Math::abs(uBit.accelerometer.getZ()) > VERT_TO_HORI_MARGIN) {
+                    return HORIZONTAL;
+                }
+                return VERTICAL;
             }
         }
     public:
