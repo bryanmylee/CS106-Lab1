@@ -188,10 +188,11 @@ class HorizontalParadox {
             im.print('0' + turnCount);
         }
 
-        void drawComposite() {
+        void printComposite() {
             im.clear();
             drawRotation();
             drawTilt();
+            uBit.display.print(im);
         }
 
         void setCurrUBitDir() {
@@ -236,7 +237,7 @@ class HorizontalParadox {
             currHeading = uBit.compass.heading() / 20;
         }
 
-        void setPrevHeading() {
+        void setPreviousHeading() {
             if (currHeading == -1) {
                 prevHeading = uBit.compass.heading() / 20;
             } else {
@@ -244,13 +245,13 @@ class HorizontalParadox {
             }
         }
 
-        void setHeadings() {
-            setPrevHeading();
+        void updateHeadings() {
+            setPreviousHeading();
             setCurrentHeading();
             setInitialHeading();
         }
 
-        void setTilt() {
+        void updateTilt() {
             Coord posRaw = {
                 uBit.accelerometer.getX() / TILT_SENS,
                 uBit.accelerometer.getY() / TILT_SENS
@@ -281,12 +282,11 @@ class HorizontalParadox {
         }
     public:
         void runFrame() {
-            setTilt();
-            setHeadings();
+            updateTilt();
+            updateHeadings();
             checkTurns();
             setCurrUBitDir();
-            drawComposite();
-            uBit.display.print(im);
+            printComposite();
         }
 
         void reset() {
@@ -302,11 +302,10 @@ class HorizontalParadox {
 
 class VerticalParadox {
     private:
-        int currIndex;
-        int initialIndex = -1; // uninitialized value
-        int firstIndex = -1;
-        Circular::Direction currUBitDir; // direction of the uBit device, not the ring drawn
-        bool endRun = false;
+        int prevIndex;
+        int currIndex = -1; // uninitialized value
+        int initialIndex = -1;
+        Circular::Direction currUBitDir = Circular::NO_ROTATION; // direction of the uBit device, not the ring drawn
 
         /*
          * 0 represents the LED closest to buttonA.
@@ -348,39 +347,26 @@ class VerticalParadox {
             int i = initialIndex;
             while (i != currIndex) {
                 setImagePixel(i);
-                i -= currUBitDir;
-                i = Math::realMod(i, PERIMETER_LEN);
+                i = Math::realMod(i + currUBitDir, PERIMETER_LEN);
             };
             setImagePixel(i);
         }
 
-        void drawCenter() {
-            im.setPixelValue(2, 2, 255);
-        }
-
-        void checkEndRun() {
-            if (currIndex == Math::realMod(initialIndex + currUBitDir, PERIMETER_LEN)) {
-                endRun = true;
-            }
+        void printRing() {
+            im.clear();
+            drawRing();
+            uBit.display.print(im);
         }
 
         void setCurrUBitDir() {
-            if (Math::realMod(firstIndex - initialIndex, PERIMETER_LEN) == 1) {
-                currUBitDir = Circular::COUNTERCLOCKWISE;
-            } else {
+            Circular::Direction prevToInit = Circular::compare(prevIndex, initialIndex, PERIMETER_LEN);
+            Circular::Direction initToCurr = Circular::compare(initialIndex, currIndex, PERIMETER_LEN);
+            if ((prevToInit == Circular::CLOCKWISE || prevToInit == Circular::NO_ROTATION)
+                    && initToCurr == Circular::CLOCKWISE) {
                 currUBitDir = Circular::CLOCKWISE;
-            }
-        }
-
-        void setFirstIndex() {
-            /*
-             * Whenever stepping out from the initialIndex, we store 
-             * the firstIndex to keep track of our intended direction.
-             */
-            if (firstIndex == -1 && currIndex != initialIndex) {
-                firstIndex = currIndex;
-            } else if (currIndex == initialIndex) {
-                firstIndex = -1;
+            } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::NO_ROTATION)
+                    && initToCurr == Circular::COUNTERCLOCKWISE) {
+                currUBitDir = Circular::COUNTERCLOCKWISE;
             }
         }
 
@@ -388,32 +374,36 @@ class VerticalParadox {
             if (initialIndex == -1) initialIndex = currIndex;
         }
 
-        void setCurrIndex() {
+        void setCurrentIndex() {
             int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
             currIndex = currDegrees / 20; // 20 degrees per pixel
         }
+
+        void setPreviousIndex() {
+            if (currIndex == -1) {
+                int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
+                prevIndex = currDegrees / 20; // 20 degrees per pixel
+            } else {
+                prevIndex = currIndex;
+            }
+        }
+
+        void updateIndexes() {
+            setPreviousIndex();
+            setCurrentIndex();
+            setInitialIndex();
+        }
     public:
         void runFrame() {
-            setCurrIndex();
-            setInitialIndex();
-            setFirstIndex();
+            updateIndexes();
             setCurrUBitDir();
-            checkEndRun();
-
-            im.clear();
-            if (endRun) {
-                drawCenter();
-            } else {
-                drawRing();
-            }
-            uBit.display.print(im);
+            printRing();
         }
 
         void reset() {
-            initialIndex = -1;
             currIndex = -1;
-            firstIndex = -1;
-            endRun = false;
+            initialIndex = -1;
+            currUBitDir = Circular::NO_ROTATION;
         }
 } vertParadox;
 
@@ -424,8 +414,8 @@ class VerticalParadox {
  *   |z| < VERT_TO_HORI_MARGIN: vertical
  *   |z| > VERT_TO_HORI_MARGIN: horizontal
  */
-#define HORI_TO_VERT_MARGIN 900
-#define VERT_TO_HORI_MARGIN 800
+#define HORI_TO_VERT_MARGIN 950
+#define VERT_TO_HORI_MARGIN 950
 #define GRAVITY 1250          // We ignore accelerometer readings with a magnitude greater than GRAVITY
 #define CHANGE_ORIENT_SENS 10 // Defines how many consecutive clean data points are captured before we register a change in verticality
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
