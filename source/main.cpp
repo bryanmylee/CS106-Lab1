@@ -463,7 +463,7 @@ class VerticalParadox {
 // We ignore accelerometer readings with a magnitude greater than GRAVITY
 #define GRAVITY 1250
 // Defines how many consecutive clean data points are captured before we register a change in verticality
-#define ORIENTATION_SENS 100
+#define CHANGE_ORIENT_SENS 10
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 class OrientationManager {
     private:
@@ -496,7 +496,7 @@ class OrientationManager {
         }
     public:
         /*
-         * Wait until we get ORIENTATION_SENS data points before registering a change in orientation
+         * Wait until we get CHANGE_ORIENT_SENS data points before registering a change in orientation
          *
          * @param (*onChange)() callback function when orientation changes
          */
@@ -518,7 +518,7 @@ class OrientationManager {
                 changedCount = 0;
                 return orientationReal;
             }
-            if (changedCount > ORIENTATION_SENS) {
+            if (changedCount > CHANGE_ORIENT_SENS) {
                 orientationReal = (Orientation) !orientationReal;
                 (*onChange)();
             }
