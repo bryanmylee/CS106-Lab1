@@ -149,11 +149,7 @@ struct Coord {
     }
 };
 
-/*
- * Defines how sensitive the dot movement is to tilting
- * Lower values result in more sensitive movement
- */
-#define TILT_SENS 250
+#define TILT_SENS 250 // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
 #define CHANGE_TILT_SENS 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
 #define PERIMETER_LEN 18
@@ -460,10 +456,8 @@ class VerticalParadox {
  */
 #define HORI_TO_VERT_MARGIN 900
 #define VERT_TO_HORI_MARGIN 800
-// We ignore accelerometer readings with a magnitude greater than GRAVITY
-#define GRAVITY 1250
-// Defines how many consecutive clean data points are captured before we register a change in verticality
-#define CHANGE_ORIENT_SENS 10
+#define GRAVITY 1250 // We ignore accelerometer readings with a magnitude greater than GRAVITY
+#define CHANGE_ORIENT_SENS 10 // Defines how many consecutive clean data points are captured before we register a change in verticality
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
 class OrientationManager {
     private:
