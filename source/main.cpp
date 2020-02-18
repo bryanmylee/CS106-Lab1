@@ -260,6 +260,20 @@ class HorizontalParadox {
         Circular::Direction currUBitDir = Circular::NO_ROTATION;
         int turnCount = 0;
 
+        void debug(ManagedString msg) {
+            uBit.serial.send("curr:");
+            uBit.serial.send(currHeading);
+            uBit.serial.send(", prev:");
+            uBit.serial.send(prevHeading);
+            uBit.serial.send(", init:");
+            uBit.serial.send(initialHeading);
+            uBit.serial.send(", dir:");
+            uBit.serial.send(currUBitDir);
+            uBit.serial.send(" | ");
+            uBit.serial.send(msg);
+            uBit.serial.send("\r\n");
+        }
+
         Coord getRawPos() {
             Coord pos = {
                 uBit.accelerometer.getX() / TILT_SENS,
@@ -304,10 +318,12 @@ class HorizontalParadox {
                     && initToCurr == Circular::CLOCKWISE) {
                 // Left or passed through initialHeading in the clockwise direction
                 currUBitDir = Circular::CLOCKWISE;
+                debug("pass CW");
             } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::NO_ROTATION)
                     && initToCurr == Circular::COUNTERCLOCKWISE) {
                 // Left or passed through initialHeading in the counter-clockwise direction
                 currUBitDir = Circular::COUNTERCLOCKWISE;
+                debug("pass CCW");
             }
         }
 
@@ -320,12 +336,14 @@ class HorizontalParadox {
                     && (initToCurr == Circular::CLOCKWISE || initToCurr == Circular::NO_ROTATION)
                     && currUBitDir == Circular::CLOCKWISE) {
                 // Touched initialHeading from the clockwise direction
+                debug("turn CW");
                 turnCount++;
                 if (turnCount > 9) turnCount = 9;
             } else if (prevToInit == Circular::COUNTERCLOCKWISE
                     && (initToCurr == Circular::COUNTERCLOCKWISE || initToCurr == Circular::NO_ROTATION)
                     && currUBitDir == Circular::COUNTERCLOCKWISE) {
                 // Touched initialHeading from the counter-clockwise direction
+                debug("turn CCW");
                 turnCount--;
                 if (turnCount < 0) turnCount = 0;
             }
@@ -571,6 +589,14 @@ class ParadoxThatDrivesUsAll {
             vertParadox.reset();
             horiParadox.reset();
         }
+        
+        static void clearScreen() {
+            if (uBit.buttonA.isPressed()) {
+                for (int i = 0; i < 20; i++) {
+                    uBit.serial.send("\r\n");
+                }
+            }
+        }
     public:
         void run() {
             while (1) {
@@ -579,6 +605,7 @@ class ParadoxThatDrivesUsAll {
                 } else {
                     horiParadox.runFrame();
                 }
+                clearScreen();
             }
         }
 } paradoxThatDrivesUsAll;
