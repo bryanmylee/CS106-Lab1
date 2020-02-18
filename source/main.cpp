@@ -86,11 +86,11 @@ class Math {
         }
 
         static double getRadians(int x, int y) {
-            /*
-             * If x ~= 0, then y / x becomes very large.
-             * To avoid that, we take the smaller ratio, and offset from PI / 2 instead.
-             */
             if (y >= 0) {
+                /*
+                 * If x ~= 0, then y / x becomes very large.
+                 * To avoid that, we take the smaller ratio, and offset from PI / 2 instead.
+                 */
                 if (x >= y) {
                     return arctan((double) y / x);
                 }
@@ -140,7 +140,7 @@ class Circular {
         /*
          * Given three points a, b, c, on a circular structure, determine the flow from a to b to c.
          *   - If the three points are not within two thirds of the radix, indeterminate flow.
-         *   - If all three poitns are on the same index, no flow.
+         *   - If all three points are on the same index, no flow.
          * @return the direction of flow, no flow, or indeterminate flow.
          */
         static CircularDirection flow(int a, int b, int c, int radix) {
@@ -167,7 +167,7 @@ struct Coord {
 };
 
 template <typename T>
-class Optional {
+struct Optional {
     private:
         T _value;
         bool _isNull;
@@ -180,22 +180,29 @@ class Optional {
             _value = value;
             _isNull = false;
         }
-
-        static Optional<T> null() {
-            return Optional();
-        }
         
         bool isNull() {
             return _isNull;
         }
 
-        void setValue(T value) {
-            _value = value;
-            _isNull = false;
+        void toNull() {
+            _isNull = true;
         }
 
-        T value() {
-            return _value;
+        T _() {
+            if (!_isNull) return _value;
+        }
+
+        Optional<T> operator=(T value) {
+            _value = value;
+            _isNull = false;
+            return value;
+        }
+
+        Optional<T> operator=(Optional<T> other) {
+            _value = other._value;
+            _isNull = other._isNull;
+            return other;
         }
 };
 
@@ -209,7 +216,7 @@ class Buffer {
     private:
         int changedCount = 0;
         int bufferSize;
-        Optional<T> currentValue = Optional<T>::null();
+        Optional<T> currentValue;
         S *s;
         T (S::*getRaw)();
     public:
@@ -226,21 +233,20 @@ class Buffer {
         T value(void (*onChange)()) {
             T raw = (*s.*getRaw)();
             if (currentValue.isNull()) {
-                currentValue.setValue(raw);
+                currentValue = raw;
                 return raw;
             }
-            T currValue = currentValue.value();
-            if (raw != currValue) {
+            if (raw != currentValue._()) {
                 changedCount++;
             } else {
                 changedCount = 0;
-                return currValue;
+                return currentValue._();
             }
             if (changedCount > bufferSize) {
-                currentValue.setValue(raw);
+                currentValue = raw;
                 (*onChange)();
             }
-            return currValue;
+            return currentValue._();
         }
 
         T value() {
@@ -249,7 +255,7 @@ class Buffer {
 
         void reset() {
             int changedCount = 0;
-            currentValue = Optional<T>::null();
+            currentValue.toNull();
         }
 };
 
@@ -267,31 +273,11 @@ class HorizontalParadox {
 
         Buffer<HorizontalParadox, int> headingBuffer
             = Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
-        int prevHeading;
-        int currHeading = -1; // uninitialized value
-        int initialHeading = -1;
+        Optional<int> prevHeading = Optional<int>();
+        Optional<int> currHeading = Optional<int>();
+        Optional<int> initialHeading = Optional<int>();
         CircularDirection currUBitDir = NO_ROTATION;
         int turnCount = 0;
-
-        void printDebug(ManagedString msg) {
-            uBit.serial.send("curr:");
-            uBit.serial.send(currHeading);
-            uBit.serial.send(", prev:");
-            uBit.serial.send(prevHeading);
-            uBit.serial.send(", init:");
-            uBit.serial.send(initialHeading);
-            uBit.serial.send(", dir:");
-            uBit.serial.send(currUBitDir);
-            uBit.serial.send(" | ");
-            uBit.serial.send(msg);
-            uBit.serial.send("\r\n");
-        }
-
-        void debug() {
-            if (uBit.buttonB.isPressed()) {
-                printDebug("");
-            }
-        }
 
         Coord getRawPos() {
             Coord pos = {
@@ -331,40 +317,36 @@ class HorizontalParadox {
         }
 
         void setCurrUBitDir() {
-            if (initialHeading == currHeading) return;
-            CircularDirection flow = Circular::flow(prevHeading, initialHeading, currHeading, PERIMETER_LEN);
+            if (initialHeading._() == currHeading._()) return;
+            CircularDirection flow = Circular::flow(prevHeading._(), initialHeading._(), currHeading._(), PERIMETER_LEN);
 
             if (flow == CLOCKWISE) {
                 // Left or passed through initialHeading in the clockwise direction
                 currUBitDir = CLOCKWISE;
-                printDebug("leave CW");
             } else if (flow == COUNTERCLOCKWISE) {
                 // Left or passed through initialHeading in the counter-clockwise direction
                 currUBitDir = COUNTERCLOCKWISE;
-                printDebug("leave CCW");
             }
         }
 
         void checkTurns() {
             if (currUBitDir == NO_ROTATION) return;
-            if (prevHeading == initialHeading) return;
+            if (prevHeading._() == initialHeading._()) return;
 
-            CircularDirection flow = Circular::flow(prevHeading, initialHeading, currHeading, PERIMETER_LEN);
+            CircularDirection flow = Circular::flow(prevHeading._(), initialHeading._(), currHeading._(), PERIMETER_LEN);
             if (flow == CLOCKWISE && currUBitDir == CLOCKWISE) {
                 // Touched initialHeading from the clockwise direction
-                printDebug("turn CW");
                 turnCount++;
                 if (turnCount > 9) turnCount = 9;
             } else if (flow == COUNTERCLOCKWISE && currUBitDir == COUNTERCLOCKWISE) {
                 // Touched initialHeading from the counter-clockwise direction
-                printDebug("turn CCW");
                 turnCount--;
                 if (turnCount < 0) turnCount = 0;
             }
         }
 
         void setInitialHeading() {
-            if (initialHeading == -1) initialHeading = currHeading;
+            if (initialHeading.isNull()) initialHeading = currHeading;
         }
 
         void setCurrentHeading() {
@@ -372,7 +354,7 @@ class HorizontalParadox {
         }
 
         void setPreviousHeading() {
-            if (currHeading == -1) {
+            if (currHeading.isNull()) {
                 prevHeading = headingBuffer.value();
             } else {
                 prevHeading = currHeading;
@@ -404,7 +386,6 @@ class HorizontalParadox {
             checkTurns();
             setCurrUBitDir();
             printComposite();
-            debug();
         }
 
         void reset() {
@@ -412,8 +393,9 @@ class HorizontalParadox {
             pos = {0, 0};
             lastBlink = uBit.systemTime();
             headingBuffer.reset();
-            currHeading = -1;
-            initialHeading = -1;
+            prevHeading.toNull();
+            currHeading.toNull();
+            initialHeading.toNull();
             currUBitDir = NO_ROTATION;
             turnCount = 0;
         }
@@ -424,9 +406,9 @@ class VerticalParadox {
     private:
         Buffer<VerticalParadox, int> indexBuffer
             = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
-        int prevIndex;
-        int currIndex = -1; // uninitialized value
-        int initialIndex = -1;
+        Optional<int> prevIndex = Optional<int>();
+        Optional<int> currIndex = Optional<int>();
+        Optional<int> initialIndex = Optional<int>();
         CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
 
         int getRawIndex() {
@@ -470,9 +452,9 @@ class VerticalParadox {
 
         // Draw the image required to print the ring around the perimeter.
         void drawRing() {
-            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex + currUBitDir, PERIMETER_LEN) == initialIndex) return; 
-            int i = initialIndex;
-            while (i != currIndex) {
+            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex._() + currUBitDir, PERIMETER_LEN) == initialIndex._()) return; 
+            int i = initialIndex._();
+            while (i != currIndex._()) {
                 setImagePixel(i);
                 i = Math::realMod(i + currUBitDir, PERIMETER_LEN);
             };
@@ -486,9 +468,9 @@ class VerticalParadox {
         }
 
         void setCurrUBitDir() {
-            if (initialIndex == currIndex) return;
+            if (initialIndex._() == currIndex._()) return;
 
-            CircularDirection flow = Circular::flow(prevIndex, initialIndex, currIndex, PERIMETER_LEN);
+            CircularDirection flow = Circular::flow(prevIndex._(), initialIndex._(), currIndex._(), PERIMETER_LEN);
             if (flow == CLOCKWISE) {
                 currUBitDir = CLOCKWISE;
             } else if (flow == COUNTERCLOCKWISE) {
@@ -497,7 +479,7 @@ class VerticalParadox {
         }
 
         void setInitialIndex() {
-            if (initialIndex == -1) initialIndex = currIndex;
+            if (initialIndex.isNull()) initialIndex = currIndex;
         }
 
         void setCurrentIndex() {
@@ -505,7 +487,7 @@ class VerticalParadox {
         }
 
         void setPreviousIndex() {
-            if (currIndex == -1) {
+            if (currIndex._() == -1) {
                 prevIndex = indexBuffer.value();
             } else {
                 prevIndex = currIndex;
@@ -526,8 +508,8 @@ class VerticalParadox {
 
         void reset() {
             indexBuffer.reset();
-            currIndex = -1;
-            initialIndex = -1;
+            currIndex.toNull();
+            initialIndex.toNull();
             currUBitDir = NO_ROTATION;
         }
 } vertParadox;
@@ -603,14 +585,6 @@ class ParadoxThatDrivesUsAll {
             vertParadox.reset();
             horiParadox.reset();
         }
-        
-        static void clearSerial() {
-            if (uBit.buttonA.isPressed()) {
-                for (int i = 0; i < 20; i++) {
-                    uBit.serial.send("\r\n");
-                }
-            }
-        }
     public:
         void run() {
             while (1) {
@@ -619,7 +593,6 @@ class ParadoxThatDrivesUsAll {
                 } else {
                     horiParadox.runFrame();
                 }
-                clearSerial();
             }
         }
 } paradoxThatDrivesUsAll;
