@@ -153,6 +153,39 @@ struct Coord {
     }
 };
 
+template <typename T>
+class Optional {
+    private:
+        T _value;
+        bool _isNull;
+    public:
+        Optional() {
+            _isNull = true;
+        }
+
+        Optional(T value) {
+            _value = value;
+            _isNull = false;
+        }
+
+        static Optional<T> null() {
+            return Optional();
+        }
+        
+        bool isNull() {
+            return _isNull;
+        }
+
+        void setValue(T value) {
+            _value = value;
+            _isNull = false;
+        }
+
+        T value() {
+            return _value;
+        }
+};
+
 /*
  * Wrapper around a value and a getRaw function that buffers a value.
  * Used to smooth out variations in data by waiting for bufferSize changes
@@ -163,7 +196,7 @@ class Buffer {
     private:
         int changedCount = 0;
         int bufferSize;
-        T currentValue;
+        Optional<T> currentValue = Optional<T>::null();
         S *s;
         T (S::*getRaw)();
     public:
@@ -173,24 +206,28 @@ class Buffer {
          */
         Buffer(int bufferSize, T (S::*getRaw)(), S *s) {
             this->bufferSize = bufferSize;
-            this->currentValue = (*s.*getRaw)();
             this->s = s;
             this->getRaw = getRaw;
         }
 
         T value(void (*onChange)()) {
             T raw = (*s.*getRaw)();
-            if (raw != currentValue) {
+            if (currentValue.isNull()) {
+                currentValue.setValue(raw);
+                return raw;
+            }
+            T currValue = currentValue.value();
+            if (raw != currValue) {
                 changedCount++;
             } else {
                 changedCount = 0;
-                return currentValue;
+                return currValue;
             }
             if (changedCount > bufferSize) {
-                currentValue = raw;
+                currentValue.setValue(raw);
                 (*onChange)();
             }
-            return currentValue;
+            return currValue;
         }
 
         T value() {
@@ -199,7 +236,7 @@ class Buffer {
 
         void reset() {
             int changedCount = 0;
-            currentValue = (*s.*getRaw)();
+            currentValue = Optional<T>::null();
         }
 };
 
@@ -210,21 +247,11 @@ class Buffer {
 #define HEADING_BUFFER 100
 class HorizontalParadox {
     private:
-        Coord getRawPos() {
-            Coord pos = {
-                uBit.accelerometer.getX() / TILT_SENS,
-                uBit.accelerometer.getY() / TILT_SENS
-            };
-            return pos;
-        }
         Buffer<HorizontalParadox, Coord> posBuffer
             = Buffer<HorizontalParadox, Coord>(TILT_BUFFER, &HorizontalParadox::getRawPos, this);
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
 
-        int getRawHeading() {
-            return uBit.compass.heading() / 20;
-        }
         Buffer<HorizontalParadox, int> headingBuffer
             = Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
         int prevHeading;
@@ -232,6 +259,18 @@ class HorizontalParadox {
         int initialHeading = -1;
         Circular::Direction currUBitDir = Circular::NO_ROTATION;
         int turnCount = 0;
+
+        Coord getRawPos() {
+            Coord pos = {
+                uBit.accelerometer.getX() / TILT_SENS,
+                uBit.accelerometer.getY() / TILT_SENS
+            };
+            return pos;
+        }
+
+        int getRawHeading() {
+            return uBit.compass.heading() / 20;
+        }
 
         void drawTilt() {
             unsigned long currTime = uBit.systemTime();
@@ -350,15 +389,16 @@ class HorizontalParadox {
 #define INDEX_BUFFER 100
 class VerticalParadox {
     private:
-        int getRawIndex() {
-            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
-        }
         Buffer<VerticalParadox, int> indexBuffer
             = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
         int prevIndex;
         int currIndex = -1; // uninitialized value
         int initialIndex = -1;
         Circular::Direction currUBitDir = Circular::NO_ROTATION; // direction of the uBit device, not the ring drawn
+
+        int getRawIndex() {
+            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
+        }
 
         /*
          * 0 represents the LED closest to buttonA.
@@ -508,7 +548,7 @@ class OrientationManager {
          *
          * @param (*onChange)() callback function when orientation changes
          */
-        Orientation getOrientationBuffered(void (*onChange)()) {
+        Orientation getOrientation(void (*onChange)()) {
             /*
              * There are some flaws with using |z| or |x, y| to determine orientation.
              * Moving the uBit along its z-axis will result in increased |z|, even when vertical.
@@ -523,22 +563,18 @@ class OrientationManager {
             currOrientation = orientationBuffer.value(onChange);
             return currOrientation;
         }
-} orientationManager;
+} oManager;
 
 class ParadoxThatDrivesUsAll {
     private:
-        Orientation currOrient;
-
         static void onOrientationChange() {
             vertParadox.reset();
             horiParadox.reset();
         }
     public:
         void run() {
-            // uBit.compass.calibrate();
             while (1) {
-                currOrient = orientationManager.getOrientationBuffered(&onOrientationChange);
-                if (currOrient == VERTICAL) {
+                if (oManager.getOrientation(&onOrientationChange) == VERTICAL) {
                     vertParadox.runFrame();
                 } else {
                     horiParadox.runFrame();
