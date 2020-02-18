@@ -122,6 +122,7 @@ class Math {
         Math() {}
 };
 
+enum CircularDirection { CLOCKWISE = 1, COUNTERCLOCKWISE = -1, NO_ROTATION = 0, INDETERMINATE = 2 };
 class Circular {
     public:
         /*
@@ -129,12 +130,24 @@ class Circular {
          *
          * @param radix the size of the circular structure
          */
-        enum Direction { CLOCKWISE = 1, COUNTERCLOCKWISE = -1, NO_ROTATION = 0, OPPOSITE = 2};
-        static Direction compare(int a, int b, int radix) {
+        static CircularDirection compare(int a, int b, int radix) {
             if (b == a) return NO_ROTATION;
-            if (Math::realMod(b - a, radix) == radix / 2) return OPPOSITE;
+            if (Math::realMod(b - a, radix) == radix / 2) return INDETERMINATE;
             if (Math::realMod(b - a, radix) < radix / 2) return CLOCKWISE;
             return COUNTERCLOCKWISE;
+        }
+
+        /*
+         * Given three points a, b, c, on a circular structure, determine the flow from a to b to c.
+         *   - If the three points are not within two thirds of the radix, indeterminate flow.
+         *   - If all three poitns are on the same index, no flow.
+         * @return the direction of flow, no flow, or indeterminate flow.
+         */
+        static CircularDirection flow(int a, int b, int c, int radix) {
+            if (a == b && b == c) return NO_ROTATION;
+            if (Math::realMod(b - a, radix) <= radix / 3 && Math::realMod(c - b, radix) <= radix / 3) return CLOCKWISE;
+            if (Math::realMod(b - c, radix) <= radix / 3 && Math::realMod(a - b, radix) <= radix / 3) return COUNTERCLOCKWISE;
+            return INDETERMINATE;
         }
     private:
         Circular() {}
@@ -257,10 +270,10 @@ class HorizontalParadox {
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
-        Circular::Direction currUBitDir = Circular::NO_ROTATION;
+        CircularDirection currUBitDir = NO_ROTATION;
         int turnCount = 0;
 
-        void debug(ManagedString msg) {
+        void printDebug(ManagedString msg) {
             uBit.serial.send("curr:");
             uBit.serial.send(currHeading);
             uBit.serial.send(", prev:");
@@ -272,6 +285,12 @@ class HorizontalParadox {
             uBit.serial.send(" | ");
             uBit.serial.send(msg);
             uBit.serial.send("\r\n");
+        }
+
+        void debug() {
+            if (uBit.buttonB.isPressed()) {
+                printDebug("");
+            }
         }
 
         Coord getRawPos() {
@@ -312,38 +331,33 @@ class HorizontalParadox {
         }
 
         void setCurrUBitDir() {
-            Circular::Direction prevToInit = Circular::compare(prevHeading, initialHeading, PERIMETER_LEN);
-            Circular::Direction initToCurr = Circular::compare(initialHeading, currHeading, PERIMETER_LEN);
-            if ((prevToInit == Circular::CLOCKWISE || prevToInit == Circular::NO_ROTATION)
-                    && initToCurr == Circular::CLOCKWISE) {
+            if (initialHeading == currHeading) return;
+            CircularDirection flow = Circular::flow(prevHeading, initialHeading, currHeading, PERIMETER_LEN);
+
+            if (flow == CLOCKWISE) {
                 // Left or passed through initialHeading in the clockwise direction
-                currUBitDir = Circular::CLOCKWISE;
-                debug("pass CW");
-            } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::NO_ROTATION)
-                    && initToCurr == Circular::COUNTERCLOCKWISE) {
+                currUBitDir = CLOCKWISE;
+                printDebug("leave CW");
+            } else if (flow == COUNTERCLOCKWISE) {
                 // Left or passed through initialHeading in the counter-clockwise direction
-                currUBitDir = Circular::COUNTERCLOCKWISE;
-                debug("pass CCW");
+                currUBitDir = COUNTERCLOCKWISE;
+                printDebug("leave CCW");
             }
         }
 
         void checkTurns() {
-            if (currUBitDir == Circular::NO_ROTATION) return;
+            if (currUBitDir == NO_ROTATION) return;
+            if (prevHeading == initialHeading) return;
 
-            Circular::Direction prevToInit = Circular::compare(prevHeading, initialHeading, PERIMETER_LEN);
-            Circular::Direction initToCurr = Circular::compare(initialHeading, currHeading, PERIMETER_LEN);
-            if (prevToInit == Circular::CLOCKWISE
-                    && (initToCurr == Circular::CLOCKWISE || initToCurr == Circular::NO_ROTATION)
-                    && currUBitDir == Circular::CLOCKWISE) {
+            CircularDirection flow = Circular::flow(prevHeading, initialHeading, currHeading, PERIMETER_LEN);
+            if (flow == CLOCKWISE && currUBitDir == CLOCKWISE) {
                 // Touched initialHeading from the clockwise direction
-                debug("turn CW");
+                printDebug("turn CW");
                 turnCount++;
                 if (turnCount > 9) turnCount = 9;
-            } else if (prevToInit == Circular::COUNTERCLOCKWISE
-                    && (initToCurr == Circular::COUNTERCLOCKWISE || initToCurr == Circular::NO_ROTATION)
-                    && currUBitDir == Circular::COUNTERCLOCKWISE) {
+            } else if (flow == COUNTERCLOCKWISE && currUBitDir == COUNTERCLOCKWISE) {
                 // Touched initialHeading from the counter-clockwise direction
-                debug("turn CCW");
+                printDebug("turn CCW");
                 turnCount--;
                 if (turnCount < 0) turnCount = 0;
             }
@@ -390,6 +404,7 @@ class HorizontalParadox {
             checkTurns();
             setCurrUBitDir();
             printComposite();
+            debug();
         }
 
         void reset() {
@@ -399,7 +414,7 @@ class HorizontalParadox {
             headingBuffer.reset();
             currHeading = -1;
             initialHeading = -1;
-            currUBitDir = Circular::NO_ROTATION;
+            currUBitDir = NO_ROTATION;
             turnCount = 0;
         }
 } horiParadox;
@@ -412,7 +427,7 @@ class VerticalParadox {
         int prevIndex;
         int currIndex = -1; // uninitialized value
         int initialIndex = -1;
-        Circular::Direction currUBitDir = Circular::NO_ROTATION; // direction of the uBit device, not the ring drawn
+        CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
 
         int getRawIndex() {
             return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
@@ -455,7 +470,7 @@ class VerticalParadox {
 
         // Draw the image required to print the ring around the perimeter.
         void drawRing() {
-            if (currUBitDir != Circular::NO_ROTATION && Math::realMod(currIndex + currUBitDir, PERIMETER_LEN) == initialIndex) return; 
+            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex + currUBitDir, PERIMETER_LEN) == initialIndex) return; 
             int i = initialIndex;
             while (i != currIndex) {
                 setImagePixel(i);
@@ -471,14 +486,13 @@ class VerticalParadox {
         }
 
         void setCurrUBitDir() {
-            Circular::Direction prevToInit = Circular::compare(prevIndex, initialIndex, PERIMETER_LEN);
-            Circular::Direction initToCurr = Circular::compare(initialIndex, currIndex, PERIMETER_LEN);
-            if ((prevToInit == Circular::CLOCKWISE || prevToInit == Circular::NO_ROTATION)
-                    && initToCurr == Circular::CLOCKWISE) {
-                currUBitDir = Circular::CLOCKWISE;
-            } else if ((prevToInit == Circular::COUNTERCLOCKWISE || prevToInit == Circular::NO_ROTATION)
-                    && initToCurr == Circular::COUNTERCLOCKWISE) {
-                currUBitDir = Circular::COUNTERCLOCKWISE;
+            if (initialIndex == currIndex) return;
+
+            CircularDirection flow = Circular::flow(prevIndex, initialIndex, currIndex, PERIMETER_LEN);
+            if (flow == CLOCKWISE) {
+                currUBitDir = CLOCKWISE;
+            } else if (flow == COUNTERCLOCKWISE) {
+                currUBitDir = COUNTERCLOCKWISE;
             }
         }
 
@@ -514,7 +528,7 @@ class VerticalParadox {
             indexBuffer.reset();
             currIndex = -1;
             initialIndex = -1;
-            currUBitDir = Circular::NO_ROTATION;
+            currUBitDir = NO_ROTATION;
         }
 } vertParadox;
 
