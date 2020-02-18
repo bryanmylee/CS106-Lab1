@@ -265,7 +265,7 @@ class Buffer {
 };
 
 #define PERIMETER_LEN 18
-#define TILT_SENS 250        // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
+#define TILT_SENS 250   // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
 #define TILT_BUFFER 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
 #define HEADING_BUFFER 100
