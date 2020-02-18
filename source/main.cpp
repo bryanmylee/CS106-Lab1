@@ -153,6 +153,11 @@ struct Coord {
     }
 };
 
+/*
+ * Wrapper around a value and a getRaw function that buffers a value.
+ * Used to smooth out variations in data by waiting for bufferSize changes
+ * in the raw data before registering a change in value.
+ */
 template <class S, typename T>
 class Buffer {
     private:
@@ -162,6 +167,10 @@ class Buffer {
         S *s;
         T (S::*getRaw)();
     public:
+        /*
+         * @param (S::*getRaw)() a function pointer to a member function of another object
+         * @param *s a pointer to the calling instance
+         */
         Buffer(int bufferSize, T (S::*getRaw)(), S *s) {
             this->bufferSize = bufferSize;
             this->currentValue = (*s.*getRaw)();
@@ -186,6 +195,11 @@ class Buffer {
 
         T value() {
             return value([](){});
+        }
+
+        void reset() {
+            int changedCount = 0;
+            currentValue = (*s.*getRaw)();
         }
 };
 
@@ -324,6 +338,7 @@ class HorizontalParadox {
         void reset() {
             pos = {0, 0};
             lastBlink = uBit.systemTime();
+            headingBuffer->reset();
             currHeading = -1;
             initialHeading = -1;
             currUBitDir = Circular::NO_ROTATION;
@@ -334,6 +349,11 @@ class HorizontalParadox {
 #define INDEX_BUFFER 100
 class VerticalParadox {
     private:
+        int getRawIndex() {
+            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
+        }
+        Buffer<VerticalParadox, int> *indexBuffer
+            = new Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
         int prevIndex;
         int currIndex = -1; // uninitialized value
         int initialIndex = -1;
@@ -407,14 +427,12 @@ class VerticalParadox {
         }
 
         void setCurrentIndex() {
-            int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-            currIndex = currDegrees / 20; // 20 degrees per pixel
+            currIndex = indexBuffer->value();
         }
 
         void setPreviousIndex() {
             if (currIndex == -1) {
-                int currDegrees = (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY());
-                prevIndex = currDegrees / 20; // 20 degrees per pixel
+                prevIndex = indexBuffer->value();
             } else {
                 prevIndex = currIndex;
             }
@@ -433,6 +451,7 @@ class VerticalParadox {
         }
 
         void reset() {
+            indexBuffer->reset();
             currIndex = -1;
             initialIndex = -1;
             currUBitDir = Circular::NO_ROTATION;
@@ -499,7 +518,8 @@ class OrientationManager {
                         uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
                 return currOrientation;
             }
-            return orientationBuffer->value(onChange);
+            currOrientation = orientationBuffer->value(onChange);
+            return currOrientation;
         }
 } orientationManager;
 
