@@ -590,7 +590,7 @@ class ParadoxThatDrivesUsAll {
             horiParadox.reset();
         }
         
-        static void clearScreen() {
+        static void clearSerial() {
             if (uBit.buttonA.isPressed()) {
                 for (int i = 0; i < 20; i++) {
                     uBit.serial.send("\r\n");
@@ -605,7 +605,7 @@ class ParadoxThatDrivesUsAll {
                 } else {
                     horiParadox.runFrame();
                 }
-                clearScreen();
+                clearSerial();
             }
         }
 } paradoxThatDrivesUsAll;
