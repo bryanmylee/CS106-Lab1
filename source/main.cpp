@@ -217,16 +217,16 @@ class HorizontalParadox {
             };
             return pos;
         }
-        Buffer<HorizontalParadox, Coord> *posBuffer
-            = new Buffer<HorizontalParadox, Coord>(TILT_BUFFER, &HorizontalParadox::getRawPos, this);
+        Buffer<HorizontalParadox, Coord> posBuffer
+            = Buffer<HorizontalParadox, Coord>(TILT_BUFFER, &HorizontalParadox::getRawPos, this);
         Coord pos = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
 
         int getRawHeading() {
             return uBit.compass.heading() / 20;
         }
-        Buffer<HorizontalParadox, int> *headingBuffer
-            = new Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
+        Buffer<HorizontalParadox, int> headingBuffer
+            = Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
         int prevHeading;
         int currHeading = -1; // uninitialized value
         int initialHeading = -1;
@@ -297,12 +297,12 @@ class HorizontalParadox {
         }
 
         void setCurrentHeading() {
-            currHeading = headingBuffer->value();
+            currHeading = headingBuffer.value();
         }
 
         void setPreviousHeading() {
             if (currHeading == -1) {
-                prevHeading = headingBuffer->value();
+                prevHeading = headingBuffer.value();
             } else {
                 prevHeading = currHeading;
             }
@@ -315,7 +315,7 @@ class HorizontalParadox {
         }
 
         void updateTilt() {
-            pos = posBuffer->value();
+            pos = posBuffer.value();
 
             if (pos.x > 2) pos.x = 2;
             if (pos.x < -2) pos.x = -2;
@@ -336,9 +336,10 @@ class HorizontalParadox {
         }
 
         void reset() {
+            posBuffer.reset();
             pos = {0, 0};
             lastBlink = uBit.systemTime();
-            headingBuffer->reset();
+            headingBuffer.reset();
             currHeading = -1;
             initialHeading = -1;
             currUBitDir = Circular::NO_ROTATION;
@@ -352,8 +353,8 @@ class VerticalParadox {
         int getRawIndex() {
             return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
         }
-        Buffer<VerticalParadox, int> *indexBuffer
-            = new Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
+        Buffer<VerticalParadox, int> indexBuffer
+            = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
         int prevIndex;
         int currIndex = -1; // uninitialized value
         int initialIndex = -1;
@@ -396,6 +397,7 @@ class VerticalParadox {
 
         // Draw the image required to print the ring around the perimeter.
         void drawRing() {
+            if (currUBitDir != Circular::NO_ROTATION && Math::realMod(currIndex + currUBitDir, PERIMETER_LEN) == initialIndex) return; 
             int i = initialIndex;
             while (i != currIndex) {
                 setImagePixel(i);
@@ -427,12 +429,12 @@ class VerticalParadox {
         }
 
         void setCurrentIndex() {
-            currIndex = indexBuffer->value();
+            currIndex = indexBuffer.value();
         }
 
         void setPreviousIndex() {
             if (currIndex == -1) {
-                prevIndex = indexBuffer->value();
+                prevIndex = indexBuffer.value();
             } else {
                 prevIndex = currIndex;
             }
@@ -451,7 +453,7 @@ class VerticalParadox {
         }
 
         void reset() {
-            indexBuffer->reset();
+            indexBuffer.reset();
             currIndex = -1;
             initialIndex = -1;
             currUBitDir = Circular::NO_ROTATION;
@@ -498,8 +500,8 @@ class OrientationManager {
                 return VERTICAL;
             }
         }
-        Buffer<OrientationManager, Orientation> *orientationBuffer
-            = new Buffer<OrientationManager, Orientation>(ORIENTATION_BUFFER, &OrientationManager::getOrientationRaw, this);
+        Buffer<OrientationManager, Orientation> orientationBuffer
+            = Buffer<OrientationManager, Orientation>(ORIENTATION_BUFFER, &OrientationManager::getOrientationRaw, this);
     public:
         /*
          * Wait until we get ORIENTATION_BUFFER data points before registering a change in orientation
@@ -518,7 +520,7 @@ class OrientationManager {
                         uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
                 return currOrientation;
             }
-            currOrientation = orientationBuffer->value(onChange);
+            currOrientation = orientationBuffer.value(onChange);
             return currOrientation;
         }
 } orientationManager;
