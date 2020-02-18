@@ -37,10 +37,11 @@ class ExtendedButton {
         }
 };
 
+#define BUTTON_REPEAT_DELAY 500
 class TimeForEverything {
     private:
-        ExtendedButton buttonA = ExtendedButton(&uBit.buttonA, 500);
-        ExtendedButton buttonB = ExtendedButton(&uBit.buttonB, 500);
+        ExtendedButton buttonA = ExtendedButton(&uBit.buttonA, BUTTON_REPEAT_DELAY);
+        ExtendedButton buttonB = ExtendedButton(&uBit.buttonB, BUTTON_REPEAT_DELAY);
 
         void countdown(int start) {
             while (start > 0) {
@@ -189,6 +190,10 @@ struct Optional {
             _isNull = true;
         }
 
+        /*
+         * Forcibly unwraps the Optional and returns the value stored.
+         * Returns void if the value is null.
+         */
         T _() {
             if (!_isNull) return _value;
         }
@@ -216,7 +221,7 @@ class Buffer {
     private:
         int changedCount = 0;
         int bufferSize;
-        Optional<T> currentValue;
+        Optional<T> currentValue = Optional<T>();
         S *s;
         T (S::*getRaw)();
     public:
