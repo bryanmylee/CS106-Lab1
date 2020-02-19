@@ -7,7 +7,7 @@ MicroBit uBit;
  */
 MicroBitImage im(5, 5);
 
-// MARK 1: Question 1
+// MARK 0: Helper classes
 template <class S>
 class ButtonWrapper {
     private:
@@ -37,44 +37,6 @@ class ButtonWrapper {
         }
 };
 
-#define BUTTON_REPEAT_DELAY 500
-class TimeForEverything {
-    private:
-        int x = 5;
-        ButtonWrapper<TimeForEverything> buttonA = ButtonWrapper<TimeForEverything>(&uBit.buttonA, BUTTON_REPEAT_DELAY);
-        ButtonWrapper<TimeForEverything> buttonB = ButtonWrapper<TimeForEverything>(&uBit.buttonB, BUTTON_REPEAT_DELAY);
-
-        void increment() {
-            if (x < 9) x++;
-        }
-
-        void decrement() {
-            if (x > 1) x--;
-        }
-
-        void countdown() {
-            while (x > 0) {
-                uBit.sleep(1000);
-                x--;
-                uBit.display.print(x);
-            }
-        }
-    public:
-        void run() {
-            while (1) {
-                uBit.display.print(x);
-                if (uBit.buttonAB.isPressed()) {
-                    countdown();
-                    break;
-                }
-                buttonA.onPress(&TimeForEverything::decrement, this);
-                buttonB.onPress(&TimeForEverything::increment, this);
-            }
-        }
-} timeForEverything;
-
-
-// MARK 2: Question 2
 #define SQRT3 1.7320508
 class Math {
     public:
@@ -267,7 +229,162 @@ class Buffer {
         }
 };
 
+
+// MARK 1: Question 1
+#define BUTTON_REPEAT_DELAY 500
+class TimeForEverything {
+    private:
+        int x = 5;
+        ButtonWrapper<TimeForEverything> buttonA = ButtonWrapper<TimeForEverything>(&uBit.buttonA, BUTTON_REPEAT_DELAY);
+        ButtonWrapper<TimeForEverything> buttonB = ButtonWrapper<TimeForEverything>(&uBit.buttonB, BUTTON_REPEAT_DELAY);
+
+        void increment() {
+            if (x < 9) x++;
+        }
+
+        void decrement() {
+            if (x > 1) x--;
+        }
+
+        void countdown() {
+            while (x > 0) {
+                uBit.sleep(1000);
+                x--;
+                uBit.display.print(x);
+            }
+        }
+    public:
+        void run() {
+            while (1) {
+                uBit.display.print(x);
+                if (uBit.buttonAB.isPressed()) {
+                    countdown();
+                    break;
+                }
+                buttonA.onPress(&TimeForEverything::decrement, this);
+                buttonB.onPress(&TimeForEverything::increment, this);
+            }
+        }
+} timeForEverything;
+
+
+// MARK 2: Question 2a
 #define PERIMETER_LEN 18
+#define INDEX_BUFFER 100
+class VerticalParadox {
+    private:
+        Buffer<VerticalParadox, int> indexBuffer
+            = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
+        Optional<int> prevIndex = Optional<int>();
+        Optional<int> currIndex = Optional<int>();
+        Optional<int> initialIndex = Optional<int>();
+        CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
+
+        int getRawIndex() {
+            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
+        }
+
+        /*
+         * 0 represents the LED closest to buttonA.
+         * Every subsequent index wraps around the perimeter clockwise.
+         */
+        Coord getPixelCoord(int index) {
+            Coord c;
+            switch (index) {
+                case 0  : c.x = 0; c.y = 2; break;
+                case 1  : c.x = 0; c.y = 1; break;
+                case 2  : c.x = 0; c.y = 0; break;
+                case 3  : c.x = 1; c.y = 0; break;
+                case 4  : c.x = 2; c.y = 0; break;
+                case 5  : c.x = 3; c.y = 0; break;
+                case 6  : c.x = 4; c.y = 0; break;
+                case 7  : c.x = 4; c.y = 1; break;
+                case 8  : c.x = 4; c.y = 2; break;
+                case 9  : c.x = 4; c.y = 3; break;
+                case 10 : c.x = 4; c.y = 4; break;
+                case 11 : c.x = 3; c.y = 4; break;
+                case 12 : c.x = 2; c.y = 4; break;
+                case 13 : c.x = 1; c.y = 4; break;
+                case 14 : c.x = 0; c.y = 4; break;
+                case 15 : c.x = 0; c.y = 3; break;
+                case 16 : c.x = 0; c.y = 2; break;
+                case 17 : c.x = 0; c.y = 1; break;
+            }
+            return c;
+        }
+
+        // Set a pixel given an index of the ring around the perimeter.
+        void setImagePixel(int index) {
+            Coord c = getPixelCoord(index);
+            im.setPixelValue(c.x, c.y, 255);
+        }
+
+        // Draw the image required to print the ring around the perimeter.
+        void drawRing() {
+            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex._() + currUBitDir, PERIMETER_LEN) == initialIndex._()) return; 
+            int i = initialIndex._();
+            while (i != currIndex._()) {
+                setImagePixel(i);
+                i = Math::realMod(i + currUBitDir, PERIMETER_LEN);
+            };
+            setImagePixel(i);
+        }
+
+        void printRing() {
+            im.clear();
+            drawRing();
+            uBit.display.print(im);
+        }
+
+        void setCurrUBitDir() {
+            if (initialIndex._() == currIndex._()) return;
+
+            CircularDirection flow = Circular::flow(prevIndex._(), initialIndex._(), currIndex._(), PERIMETER_LEN);
+            if (flow == CLOCKWISE) {
+                currUBitDir = CLOCKWISE;
+            } else if (flow == COUNTERCLOCKWISE) {
+                currUBitDir = COUNTERCLOCKWISE;
+            }
+        }
+
+        void setInitialIndex() {
+            if (initialIndex.isNull()) initialIndex = currIndex;
+        }
+
+        void setCurrentIndex() {
+            currIndex = indexBuffer.value();
+        }
+
+        void setPreviousIndex() {
+            if (currIndex._() == -1) {
+                prevIndex = indexBuffer.value();
+            } else {
+                prevIndex = currIndex;
+            }
+        }
+
+        void updateIndexes() {
+            setPreviousIndex();
+            setCurrentIndex();
+            setInitialIndex();
+        }
+    public:
+        void runFrame() {
+            updateIndexes();
+            setCurrUBitDir();
+            printRing();
+        }
+
+        void reset() {
+            indexBuffer.reset();
+            currIndex.toNull();
+            initialIndex.toNull();
+            currUBitDir = NO_ROTATION;
+        }
+} vertParadox;
+
+
+// MARK 3: Question 2b
 #define TILT_SENS 250   // Defines how sensitive the dot movement is to tilting. Lower values result in more sensitive movement.
 #define TILT_BUFFER 100 // How many data points before registering a change in tilt
 #define BLINK_DUR 250
@@ -409,119 +526,8 @@ class HorizontalParadox {
         }
 } horiParadox;
 
-#define INDEX_BUFFER 100
-class VerticalParadox {
-    private:
-        Buffer<VerticalParadox, int> indexBuffer
-            = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
-        Optional<int> prevIndex = Optional<int>();
-        Optional<int> currIndex = Optional<int>();
-        Optional<int> initialIndex = Optional<int>();
-        CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
 
-        int getRawIndex() {
-            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
-        }
-
-        /*
-         * 0 represents the LED closest to buttonA.
-         * Every subsequent index wraps around the perimeter clockwise.
-         */
-        Coord getPixelCoord(int index) {
-            Coord c;
-            switch (index) {
-                case 0  : c.x = 0; c.y = 2; break;
-                case 1  : c.x = 0; c.y = 1; break;
-                case 2  : c.x = 0; c.y = 0; break;
-                case 3  : c.x = 1; c.y = 0; break;
-                case 4  : c.x = 2; c.y = 0; break;
-                case 5  : c.x = 3; c.y = 0; break;
-                case 6  : c.x = 4; c.y = 0; break;
-                case 7  : c.x = 4; c.y = 1; break;
-                case 8  : c.x = 4; c.y = 2; break;
-                case 9  : c.x = 4; c.y = 3; break;
-                case 10 : c.x = 4; c.y = 4; break;
-                case 11 : c.x = 3; c.y = 4; break;
-                case 12 : c.x = 2; c.y = 4; break;
-                case 13 : c.x = 1; c.y = 4; break;
-                case 14 : c.x = 0; c.y = 4; break;
-                case 15 : c.x = 0; c.y = 3; break;
-                case 16 : c.x = 0; c.y = 2; break;
-                case 17 : c.x = 0; c.y = 1; break;
-            }
-            return c;
-        }
-
-        // Set a pixel given an index of the ring around the perimeter.
-        void setImagePixel(int index) {
-            Coord c = getPixelCoord(index);
-            im.setPixelValue(c.x, c.y, 255);
-        }
-
-        // Draw the image required to print the ring around the perimeter.
-        void drawRing() {
-            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex._() + currUBitDir, PERIMETER_LEN) == initialIndex._()) return; 
-            int i = initialIndex._();
-            while (i != currIndex._()) {
-                setImagePixel(i);
-                i = Math::realMod(i + currUBitDir, PERIMETER_LEN);
-            };
-            setImagePixel(i);
-        }
-
-        void printRing() {
-            im.clear();
-            drawRing();
-            uBit.display.print(im);
-        }
-
-        void setCurrUBitDir() {
-            if (initialIndex._() == currIndex._()) return;
-
-            CircularDirection flow = Circular::flow(prevIndex._(), initialIndex._(), currIndex._(), PERIMETER_LEN);
-            if (flow == CLOCKWISE) {
-                currUBitDir = CLOCKWISE;
-            } else if (flow == COUNTERCLOCKWISE) {
-                currUBitDir = COUNTERCLOCKWISE;
-            }
-        }
-
-        void setInitialIndex() {
-            if (initialIndex.isNull()) initialIndex = currIndex;
-        }
-
-        void setCurrentIndex() {
-            currIndex = indexBuffer.value();
-        }
-
-        void setPreviousIndex() {
-            if (currIndex._() == -1) {
-                prevIndex = indexBuffer.value();
-            } else {
-                prevIndex = currIndex;
-            }
-        }
-
-        void updateIndexes() {
-            setPreviousIndex();
-            setCurrentIndex();
-            setInitialIndex();
-        }
-    public:
-        void runFrame() {
-            updateIndexes();
-            setCurrUBitDir();
-            printRing();
-        }
-
-        void reset() {
-            indexBuffer.reset();
-            currIndex.toNull();
-            initialIndex.toNull();
-            currUBitDir = NO_ROTATION;
-        }
-} vertParadox;
-
+// MARK 4: Switching between 2a and 2b
 /*
  * The margin of error for what we define as horizontal.
  *   |x, y| < HORI_TO_VERT_MARGIN: horizontal
@@ -587,6 +593,8 @@ class OrientationManager {
         }
 } oManager;
 
+
+// MARK 5: QUestion 2 runner class
 class ParadoxThatDrivesUsAll {
     private:
         static void onOrientationChange() {
@@ -609,8 +617,8 @@ int main() {
     uBit.init();
 
     // Uncomment the lines below to test each question
-    timeForEverything.run();
-    // paradoxThatDrivesUsAll.run();
+    // timeForEverything.run();
+    paradoxThatDrivesUsAll.run();
 
     release_fiber();
 }
