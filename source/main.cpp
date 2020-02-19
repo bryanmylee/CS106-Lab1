@@ -51,7 +51,7 @@ class Math {
             return x - x * x * x / 3 + x * x * x * x * x / 5;
         }
 
-        static double getRadians(int x, int y) {
+        static double radians(int x, int y) {
             if (y >= 0) {
                 /*
                  * If x ~= 0, then y / x becomes very large.
@@ -63,17 +63,17 @@ class Math {
                 return PI / 2 - arctan((double) x / y);
             }
             // tan has a periodicity of PI, so we have to offset by PI to get the full 2PI radians.
-            return PI + getRadians(-x, -y);
+            return PI + radians(-x, -y);
         }
 
         /*
          * @return degrees from 0 to <360
          */
-        static double getDegrees(int x, int y) {
-            return getRadians(x, y) / PI * 180;
+        static double degrees(int x, int y) {
+            return radians(x, y) / PI * 180;
         }
 
-        static int realMod(int x, int radix) {
+        static int mod(int x, int radix) {
             const int result = x % radix;
             return result >= 0 ? result : result + radix;
         }
@@ -98,8 +98,8 @@ class Circular {
          */
         static CircularDirection compare(int a, int b, int radix) {
             if (b == a) return NO_ROTATION;
-            if (Math::realMod(b - a, radix) == radix / 2) return INDETERMINATE;
-            if (Math::realMod(b - a, radix) < radix / 2) return CLOCKWISE;
+            if (Math::mod(b - a, radix) == radix / 2) return INDETERMINATE;
+            if (Math::mod(b - a, radix) < radix / 2) return CLOCKWISE;
             return COUNTERCLOCKWISE;
         }
 
@@ -111,8 +111,8 @@ class Circular {
          */
         static CircularDirection flow(int a, int b, int c, int radix) {
             if (a == b && b == c) return NO_ROTATION;
-            if (Math::realMod(b - a, radix) <= radix / 3 && Math::realMod(c - b, radix) <= radix / 3) return CLOCKWISE;
-            if (Math::realMod(b - c, radix) <= radix / 3 && Math::realMod(a - b, radix) <= radix / 3) return COUNTERCLOCKWISE;
+            if (Math::mod(b - a, radix) <= radix / 3 && Math::mod(c - b, radix) <= radix / 3) return CLOCKWISE;
+            if (Math::mod(b - c, radix) <= radix / 3 && Math::mod(a - b, radix) <= radix / 3) return COUNTERCLOCKWISE;
             return INDETERMINATE;
         }
     private:
@@ -286,7 +286,7 @@ class VerticalParadox {
         CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
 
         int getRawIndex() {
-            return (int) Math::getDegrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
+            return (int) Math::degrees(uBit.accelerometer.getX(), uBit.accelerometer.getY()) / 20;
         }
 
         /*
@@ -326,11 +326,11 @@ class VerticalParadox {
 
         // Draw the image required to print the ring around the perimeter.
         void drawRing() {
-            if (currUBitDir != NO_ROTATION && Math::realMod(currIndex._() + currUBitDir, PERIMETER_LEN) == initialIndex._()) return; 
+            if (currUBitDir != NO_ROTATION && Math::mod(currIndex._() + currUBitDir, PERIMETER_LEN) == initialIndex._()) return; 
             int i = initialIndex._();
             while (i != currIndex._()) {
                 setImagePixel(i);
-                i = Math::realMod(i + currUBitDir, PERIMETER_LEN);
+                i = Math::mod(i + currUBitDir, PERIMETER_LEN);
             };
             setImagePixel(i);
         }
