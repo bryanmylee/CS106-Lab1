@@ -8,6 +8,7 @@ MicroBit uBit;
 MicroBitImage im(5, 5);
 
 // MARK 1: Question 1
+template <class S>
 class ButtonWrapper {
     private:
         unsigned long lastPressed;
@@ -21,10 +22,10 @@ class ButtonWrapper {
             lastPressed = uBit.systemTime();
         }
 
-        void onPress(void (*op)()) {
+        void onPress(void (S::*op)(), S *s) {
             if (uButton->isPressed() && uBit.systemTime() - lastPressed > repeatDelay) {
                 lastPressed = uBit.systemTime();
-                (*op)();
+                (*s.*op)();
             }
             /*
              * If the key is lifted before the key repeat delay is over, then reset the key event
@@ -37,20 +38,21 @@ class ButtonWrapper {
 };
 
 #define BUTTON_REPEAT_DELAY 500
-int x = 5;
-ButtonWrapper buttonA = ButtonWrapper(&uBit.buttonA, BUTTON_REPEAT_DELAY);
-ButtonWrapper buttonB = ButtonWrapper(&uBit.buttonB, BUTTON_REPEAT_DELAY);
 class TimeForEverything {
     private:
-        static void increment() {
+        int x = 5;
+        ButtonWrapper<TimeForEverything> buttonA = ButtonWrapper<TimeForEverything>(&uBit.buttonA, BUTTON_REPEAT_DELAY);
+        ButtonWrapper<TimeForEverything> buttonB = ButtonWrapper<TimeForEverything>(&uBit.buttonB, BUTTON_REPEAT_DELAY);
+
+        void increment() {
             if (x < 9) x++;
         }
 
-        static void decrement() {
+        void decrement() {
             if (x > 1) x--;
         }
 
-        static void countdown() {
+        void countdown() {
             while (x > 0) {
                 uBit.sleep(1000);
                 x--;
@@ -58,18 +60,18 @@ class TimeForEverything {
             }
         }
     public:
-        static void run() {
+        void run() {
             while (1) {
                 uBit.display.print(x);
                 if (uBit.buttonAB.isPressed()) {
                     countdown();
                     break;
                 }
-                buttonA.onPress(&decrement);
-                buttonB.onPress(&increment);
+                buttonA.onPress(&TimeForEverything::decrement, this);
+                buttonB.onPress(&TimeForEverything::increment, this);
             }
         }
-};
+} timeForEverything;
 
 
 // MARK 2: Question 2
@@ -607,7 +609,7 @@ int main() {
     uBit.init();
 
     // Uncomment the lines below to test each question
-    TimeForEverything::run();
+    timeForEverything.run();
     // paradoxThatDrivesUsAll.run();
 
     release_fiber();
