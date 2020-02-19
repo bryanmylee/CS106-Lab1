@@ -132,6 +132,11 @@ struct Coord {
     }
 };
 
+/*
+ * Wrapper around a nullable value.
+ * Provides a nicer way of handling null values.
+ * @param T the type of value being wrapped.
+ */
 template <typename T>
 struct Optional {
     private:
@@ -180,6 +185,8 @@ struct Optional {
  * Wrapper around a value and a getRaw function that buffers a value.
  * Used to smooth out variations in data by waiting for bufferSize changes
  * in the raw data before registering a change in value.
+ * @param S the class of the instance to call for getRaw
+ * @param T the type of value being buffered.
  */
 template <class S, typename T>
 class Buffer {
@@ -280,9 +287,10 @@ class VerticalParadox {
     private:
         Buffer<VerticalParadox, int> indexBuffer
             = Buffer<VerticalParadox, int>(INDEX_BUFFER, &VerticalParadox::getRawIndex, this);
-        Optional<int> prevIndex = Optional<int>();
-        Optional<int> currIndex = Optional<int>();
-        Optional<int> initialIndex = Optional<int>();
+
+        Optional<int> prevIndex       = Optional<int>();
+        Optional<int> currIndex       = Optional<int>();
+        Optional<int> initialIndex    = Optional<int>();
         CircularDirection currUBitDir = NO_ROTATION; // direction of the uBit device, not the ring drawn
 
         int getRawIndex() {
@@ -374,7 +382,7 @@ class VerticalParadox {
             setInitialIndex();
         }
     public:
-        void runFrame() {
+        void tick() {
             updateIndexes();
             setCurrUBitDir();
             printRing();
@@ -398,16 +406,18 @@ class HorizontalParadox {
     private:
         Buffer<HorizontalParadox, Coord> posBuffer
             = Buffer<HorizontalParadox, Coord>(TILT_BUFFER, &HorizontalParadox::getRawPos, this);
-        Coord pos = {0, 0};
+
+        Coord pos               = {0, 0};
         unsigned long lastBlink = uBit.systemTime();
 
         Buffer<HorizontalParadox, int> headingBuffer
             = Buffer<HorizontalParadox, int>(HEADING_BUFFER, &HorizontalParadox::getRawHeading, this);
-        Optional<int> prevHeading = Optional<int>();
-        Optional<int> currHeading = Optional<int>();
-        Optional<int> initialHeading = Optional<int>();
+
+        Optional<int> prevHeading     = Optional<int>();
+        Optional<int> currHeading     = Optional<int>();
+        Optional<int> initialHeading  = Optional<int>();
         CircularDirection currUBitDir = NO_ROTATION;
-        int turnCount = 0;
+        int turnCount                 = 0;
 
         Coord getRawPos() {
             Coord pos = {
@@ -510,7 +520,7 @@ class HorizontalParadox {
             }
         }
     public:
-        void runFrame() {
+        void tick() {
             updateTilt();
             updateHeadings();
             checkTurns();
@@ -549,6 +559,7 @@ class Orienter {
     private:
         Buffer<Orienter, Orientation> orientationBuffer
             = Buffer<Orienter, Orientation>(ORIENTATION_BUFFER, &Orienter::getRawOrientation, this);
+
         Orientation currOrientation = HORIZONTAL;
         /*
          * When VERTICAL, we check for horizontality by checking the magnitude of the vector <z>
@@ -613,9 +624,9 @@ class ParadoxThatDrivesUsAll {
                     horiParadox.reset();
                 });
                 if (orienter.getOrientation() == VERTICAL) {
-                    vertParadox.runFrame();
+                    vertParadox.tick();
                 } else {
-                    horiParadox.runFrame();
+                    horiParadox.tick();
                 }
             }
         }
