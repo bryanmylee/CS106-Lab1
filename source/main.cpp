@@ -200,6 +200,11 @@ class Buffer {
             this->getRaw = getRaw;
         }
 
+        T oldValue() {
+            if (currentValue.isNull()) return (*s.*getRaw)();
+            return currentValue._();
+        }
+
         T value(void (*onChange)()) {
             T raw = (*s.*getRaw)();
             if (currentValue.isNull()) {
@@ -540,10 +545,11 @@ class HorizontalParadox {
 #define GRAVITY 1250           // We ignore accelerometer readings with a magnitude greater than GRAVITY
 #define ORIENTATION_BUFFER 100 // Defines how many consecutive clean data points are captured before we register a change in verticality
 enum Orientation { HORIZONTAL = 0, VERTICAL = 1 };
-class OrientationManager {
+class Orienter {
     private:
+        Buffer<Orienter, Orientation> orientationBuffer
+            = Buffer<Orienter, Orientation>(ORIENTATION_BUFFER, &Orienter::getRawOrientation, this);
         Orientation currOrientation = HORIZONTAL;
-
         /*
          * When VERTICAL, we check for horizontality by checking the magnitude of the vector <z>
          *      0: perfectly vertical
@@ -553,11 +559,10 @@ class OrientationManager {
          *   1023: perfectly vertical
          * This is so we can avoid issues with moving the uBit.
          */
-        Orientation getOrientationRaw() {
+        Orientation getRawOrientation() {
             if (currOrientation == HORIZONTAL) {
-                if (Math::squaredMagnitude(
-                            uBit.accelerometer.getX(),
-                            uBit.accelerometer.getY()) > HORI_TO_VERT_MARGIN * HORI_TO_VERT_MARGIN) {
+                if (Math::squaredMagnitude(uBit.accelerometer.getX(),
+                                           uBit.accelerometer.getY()) > HORI_TO_VERT_MARGIN * HORI_TO_VERT_MARGIN) {
                     return VERTICAL;
                 }
                 return HORIZONTAL;
@@ -568,43 +573,46 @@ class OrientationManager {
                 return VERTICAL;
             }
         }
-        Buffer<OrientationManager, Orientation> orientationBuffer
-            = Buffer<OrientationManager, Orientation>(ORIENTATION_BUFFER, &OrientationManager::getOrientationRaw, this);
+
+        bool largerThanGravity() {
+            return Math::squaredMagnitude(uBit.accelerometer.getX(),
+                                          uBit.accelerometer.getY(),
+                                          uBit.accelerometer.getZ()) > GRAVITY * GRAVITY;
+        }
     public:
-        /*
-         * Wait until we get ORIENTATION_BUFFER data points before registering a change in orientation
-         *
-         * @param (*onChange)() callback function when orientation changes
-         */
-        Orientation getOrientation(void (*onChange)()) {
+        Orientation getOrientation() {
+            return currOrientation;
+        }
+
+        void tick(void (*onChange)()) {
             /*
              * There are some flaws with using |z| or |x, y| to determine orientation.
              * Moving the uBit along its z-axis will result in increased |z|, even when vertical.
              * To mitigate this, we can ignore all readings where |x, y, z| > GRAVITY
              */
-            if (Math::squaredMagnitude(
-                        uBit.accelerometer.getX(),
-                        uBit.accelerometer.getY(),
-                        uBit.accelerometer.getZ()) > GRAVITY * GRAVITY) {
-                return currOrientation;
+            if (largerThanGravity()) {
+                currOrientation = orientationBuffer.oldValue();
             }
             currOrientation = orientationBuffer.value(onChange);
-            return currOrientation;
         }
-} oManager;
+} orienter;
 
 
 // MARK 5: QUestion 2 runner class
 class ParadoxThatDrivesUsAll {
     private:
-        static void onOrientationChange() {
-            vertParadox.reset();
-            horiParadox.reset();
-        }
+        // static void onOrientationChange() {
+        //     vertParadox.reset();
+        //     horiParadox.reset();
+        // }
     public:
         void run() {
             while (1) {
-                if (oManager.getOrientation(&onOrientationChange) == VERTICAL) {
+                orienter.tick([](){
+                    vertParadox.reset();
+                    horiParadox.reset();
+                });
+                if (orienter.getOrientation() == VERTICAL) {
                     vertParadox.runFrame();
                 } else {
                     horiParadox.runFrame();
