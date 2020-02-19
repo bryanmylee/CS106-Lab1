@@ -609,15 +609,11 @@ class Orienter {
 } orienter;
 
 
-// MARK 5: QUestion 2 runner class
+// MARK 5: Question 2 runner class
 class ParadoxThatDrivesUsAll {
-    private:
-        // static void onOrientationChange() {
-        //     vertParadox.reset();
-        //     horiParadox.reset();
-        // }
     public:
         void run() {
+            if (!uBit.compass.isCalibrated() && !uBit.compass.isCalibrating()) uBit.compass.calibrate();
             while (1) {
                 orienter.tick([](){
                     vertParadox.reset();
@@ -632,6 +628,8 @@ class ParadoxThatDrivesUsAll {
         }
 } paradoxThatDrivesUsAll;
 
+
+// MARK 6: main function
 int main() {
     uBit.init();
 
