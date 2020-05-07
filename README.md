@@ -23,3 +23,27 @@
       2. When the micro:bit is rotated anti-clockwise, the number decrements.
       3. The number must remain in the range [0, 9].
    3. If the blinking LED hits any of the edges, the number is reset to 0. (1.5m)
+
+## Design Considerations
+
+Due to the limitations of the mbed compiler, it is not possible to include more than one source file before compilation. As such, all classes and types had to be defined within one source file.
+
+### `Circular` and `CircularDirection`
+
+The `Circular` class includes multiple helper functions specific to values that *wrap* around back to 0.
+
+More importantly, it provides a way to determine circular rotation directions (clockwise, anti-clockwise) based on discrete points. Difficulty arises when data points overflow and wrap multiple times around the circular structure. There are two methods -- `compare` and `flow` -- that handle separate cases.
+
+`CircularDirection` represents a clockwise, anti-clockwise, or indeterminate rotation.
+
+### `Optional`
+
+A simple wrapper class to better handle "nullable" data.
+
+### `Buffer`
+
+The `Buffer` class smoothens raw data over time based on the frequency of "changed" data points.
+
+At every tick cycle, it gets raw data from a pointer to some method which produces that data. It then keeps track of the number of data points which represent a significant change, and only reports a change when there are enough data points.
+
+This allows us to remove any spikes in the raw data due to noise, which is extremely prevalent in the micro:bit.
